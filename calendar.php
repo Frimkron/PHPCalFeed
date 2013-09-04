@@ -1,19 +1,32 @@
 <?php
 
-// TODO: handle overwriting of input file
-// TODO: yaml input
+// TODO: proper date formatting for timezone
+// TODO: proper character encoding
+// TODO: apply polymorphism
+// TODO: output events in time order
+// TODO: don't output events in past
 // TODO: recurring events
-// TODO: xml output
-// TODO: xml schema
+// TODO: proper html output with navigation
 // TODO: proper css
+// TODO: input discovery
+// TODO: input preference storage in config php
+// TODO: yaml input
 // TODO: more css examples
 // TODO: atom format
 // TODO: yaml output
 // TODO: google calendar input
 // TODO: csv input
 // TODO: wordpress api
+// TODO: textpattern api
+// TODO: sql database input
+// TODO: web-based UI for config
+// TODO: web-based UI input
+// TODO: facebook input
+// TODO: eventbrite input
 // TODO: other useful input formats
-
+// TODO: icalendar feed name and link?
+// TODO: icalendar prodid standard?
+// TODO: icalendar disallows zero events
 
 function input_json_if_necessary($name,$updated){
 	$filename = $name."-master.json";
@@ -64,10 +77,6 @@ function input_json_if_necessary($name,$updated){
 }
 
 function make_html_fragment($doc,$data){
-
-	// TODO: week formating
-	// TODO: pagination
-	// TODO: timezone
 
 	$elcontainer = $doc->createElement("div");
 	$elcontainer->setAttribute("class","cal-container");
@@ -121,6 +130,10 @@ function make_html_fragment($doc,$data){
 		$elcontainer->appendChild($elevents);
 
 	return $elcontainer;
+}
+
+function mimetypes_html(){
+	return array("text/html");
 }
 
 function filename_html_frag($name){
@@ -192,7 +205,8 @@ function write_html_full($name,$data){
 }
 
 function output_html_full($name){
-	header("Content-Type: text/html");
+	$ctypes = mimetypes_html();
+	header("Content-Type: ".$ctypes[0]);
 	$filename = filename_html_full($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;
@@ -207,13 +221,15 @@ function handle_html_full($name){
 	if($error) return $error;
 }
 
+function mimetypes_json(){
+	return array("application/json","text/json","application/javascript","text/javascript");
+}
+
 function filename_json($name){
 	return $name.".json";
 }
 
 function write_json($name,$data){
-	// TODO: date formatting
-	// TODO: timezone
 	$filename = filename_json($name);
 	$handle = @fopen($filename,"w");
 	if($handle === FALSE){
@@ -239,6 +255,10 @@ function handle_json($name){
 	if($error) return $error;
 }
 
+function mimetypes_icalendar(){
+	return array("text/calendar");
+}
+
 function filename_icalendar($name){
 	return $name.".ical";
 }
@@ -248,8 +268,6 @@ function icalendar_wrap($text){
 }
 
 function write_icalendar($name,$data){
-	// TODO: feed name and link
-	// TODO: timezone
 	$filename = filename_icalendar($name);
 	$handle = fopen($filename,"w");
 	if($handle === FALSE){
@@ -257,6 +275,7 @@ function write_icalendar($name,$data){
 	}
 	fwrite($handle,"BEGIN:VCALENDAR\r\n");
 	fwrite($handle,"VERSION:2.0\r\n");
+	fwrite($handle,"PRODID:Calendar Script\r\n");
 	foreach($data->events as $item){
 		fwrite($handle,"BEGIN:VEVENT\r\n");
 		fwrite($handle,"DTSTART:".date("Ymd\THi\Z",$item->{"start-time"})."\r\n");
@@ -275,7 +294,8 @@ function write_icalendar($name,$data){
 }
 
 function output_icalendar($name){
-	header("Content-Type: text/calendar");
+	$ctypes = mimetypes_icalendar();
+	header("Content-Type: ".$ctypes[0]);
 	$filename = filename_icalendar($name);
 	if( @readfile($filename) === FALSE){
 		return "Error reading ".$filename;
@@ -288,6 +308,10 @@ function handle_icalendar($name){
 	if($error) return $error;
 	$error = output_icalendar($name);
 	if($error) return $error;
+}
+
+function mimetypes_rss(){
+	return array("application/rss+xml","application/rss");
 }
 
 function filename_rss($name){
@@ -350,7 +374,8 @@ function write_rss($name,$data){
 }
 
 function output_rss($name){
-	header("Content-Type: application/rss+xml");
+	$ctypes = mimetypes_rss();
+	header("Content-Type: ".$ctypes[0]);
 	$filename = filename_rss($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;
@@ -362,6 +387,94 @@ function handle_rss($name){
 	$error = update_cached_if_necessary($name,$filename);
 	if($error) return $error;
 	$error = output_rss($name);
+	if($error) return $error;
+}
+
+function mimetypes_xml(){
+	return array("application/xml","text/xml");
+}
+
+function filename_xml($name){
+	return $name.".xml";
+}
+
+function write_xml($name,$data){
+	
+	$namespace = "http://markfrimston.co.uk/calendar_schema";
+	
+	$dom = new DOMImplementation();
+	
+	$doc = $dom->createDocument();
+		
+		$elcalendar = $doc->createElement("calendar");
+		$elcalendar->setAttributeNS("http://www.w3.org/2001/XMLSchema-instance",
+				"xsi:schemaLocation", $namespace." calendar.xsd");
+			
+			if(isset($data->name)){
+				$elname = $doc->createElement("name",$data->name);
+				$elcalendar->appendChild($elname);
+			}
+			if(isset($data->description)){
+				$eldescription = $doc->createElement("description",$data->description);
+				$elcalendar->appendChild($eldescription);
+			}
+			if(isset($data->url)){
+				$elurl = $doc->createElement("url",$data->url);
+				$elcalendar->appendChild($elurl);
+			}
+			
+			foreach($data->events as $item){
+			
+				$elevent = $doc->createElement("event");
+			
+					$elname = $doc->createElement("name",$item->name);
+					$elevent->appendChild($elname);
+					
+					$starttime = new DateTime("@".$item->{"start-time"});
+					$elstarttime = $doc->createElement("start-time",$starttime->format(DateTime::ISO8601));
+					$elevent->appendChild($elstarttime);
+					
+					$endtime = new DateTime("@".$item->{"end-time"});
+					$elendtime = $doc->createElement("end-time",$endtime->format(DateTime::ISO8601));
+					$elevent->appendChild($elendtime);
+					
+					if(isset($item->description)){
+						$eldescription = $doc->createElement("description",$item->description);
+						$elevent->appendChild($eldescription);
+					}
+					if(isset($item->url)){
+						$elurl = $doc->createElement("url",$item->url);
+						$elevent->appendChild($elurl);
+					}
+			
+				$elcalendar->appendChild($elevent);
+			}
+		
+		$doc->appendChild($elcalendar);
+
+	$doc->createAttributeNS($namespace,"xmlns");
+	
+	$filename = filename_xml($name);
+	$doc->formatOutput = TRUE;
+	if( @$doc->save($filename) === FALSE ){
+		return "Failed to write ".$filename;
+	}
+}
+
+function output_xml($name){
+	$ctypes = mimetypes_xml();
+	header("Content-Type: ".$ctypes[0]);
+	$filename = filename_xml($name);
+	if( @readfile($filename) === FALSE ){
+		return "Error reading ".$filename;	
+	}
+}
+
+function handle_xml($name){
+	$filename = filename_xml($name);
+	$error = update_cached_if_necessary($name,$filename);
+	if($error) return $error;
+	$error = output_xml($name);
 	if($error) return $error;
 }
 
@@ -387,34 +500,57 @@ function update_cached_if_necessary($name,$filename){
 		if($error) return $error;
 		$error = write_rss($name,$data);
 		if($error) return $error;
+		$error = write_xml($name,$data);
+		if($error) return $error;
 	}
+}
+
+function establish_output_format(){
+	// accessed directly
+	if(basename(__FILE__) == basename($_SERVER["SCRIPT_FILENAME"])){
+		// format parameter specified
+		if(array_key_exists("format",$_GET)){
+			return $_GET["format"];
+		// content negotiation
+		}else{
+			$acceptlist = array();
+			foreach(explode(",",$_SERVER["HTTP_ACCEPT"]) as $accept){
+				$accept = trim(strtolower($accept));
+				if(strpos($accept,";q=")){
+					$bits = explode(";q=",$accept);
+					$accept = $bits[0];
+					$quality = floatval($bits[1]);
+				}else{
+					$quality = 1.0;
+				}
+				$acceptlist[$accept] = $quality;
+			}
+			arsort($acceptlist);
+			foreach($acceptlist as $accept => $quality){
+				if(in_array($accept,mimetypes_json()))		return "json";
+				if(in_array($accept,mimetypes_html()))		return "html";
+				if(in_array($accept,mimetypes_icalendar()))	return "icalendar";
+				if(in_array($accept,mimetypes_rss()))		return "rss";
+				if(in_array($accept,mimetypes_xml()))		return "xml";
+			}
+			return "";
+		}
+	// included from another script
+	}else{
+		return "html-fragment";
+	}	
 }
 
 
 $name = basename(__FILE__,".php");
 
-if(basename(__FILE__) == basename($_SERVER["SCRIPT_FILENAME"])){
-	$format = array_key_exists("format",$_GET) ? $_GET["format"] : "";
-}else{
-	$format = "html-fragment";
-}
-
-switch($format){
-	case "json":
-		$error = handle_json($name);
-		break;
-	case "html-fragment":
-		$error = handle_html_frag($name);
-		break;
-	case "icalendar":
-		$error = handle_icalendar($name);
-		break;
-	case "rss":
-		$error = handle_rss($name);
-		break;
-	default:
-		$error = handle_html_full($name);
-		break;
+switch(establish_output_format()){
+	case "json":			$error = handle_json($name);		break;
+	case "html-fragment":	$error = handle_html_frag($name);	break;
+	case "icalendar":		$error = handle_icalendar($name);	break;
+	case "rss":				$error = handle_rss($name);			break;
+	case "xml":				$error = handle_xml($name);			break;
+	default:				$error = handle_html_full($name);	break;
 }
 
 if($error) die($error);
