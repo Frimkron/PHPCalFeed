@@ -1,6 +1,7 @@
 <?php
 
 // TODO: proper date formatting for timezone
+//		html
 // TODO: proper character encoding
 // TODO: apply polymorphism
 // TODO: output events in time order
@@ -12,6 +13,7 @@
 // TODO: input preference storage in config php
 // TODO: yaml input
 // TODO: more css examples
+// TODO: jsonp output (application/javascript)
 // TODO: atom format
 // TODO: yaml output
 // TODO: google calendar input
@@ -144,7 +146,7 @@ function write_html_frag($name,$data){
 	$doc = new DOMDocument();
 	$doc->appendChild( make_html_fragment($doc,$data) );
 	$doc->formatOutput = TRUE;
-	$doc->saveHTMLFile(filename_html_frag($name));
+ 	$doc->saveHTMLFile(filename_html_frag($name));
 }
 
 function output_html_frag($name){
@@ -222,7 +224,7 @@ function handle_html_full($name){
 }
 
 function mimetypes_json(){
-	return array("application/json","text/json","application/javascript","text/javascript");
+	return array("application/json","text/json");
 }
 
 function filename_json($name){
@@ -230,6 +232,11 @@ function filename_json($name){
 }
 
 function write_json($name,$data){
+	$data = unserialize(serialize($data)); //deep copy
+	foreach($data->events as $item){
+		$item->{"start-time"} = date("c",$item->{"start-time"});
+		$item->{"end-time"} = date("c",$item->{"end-time"});
+	}
 	$filename = filename_json($name);
 	$handle = @fopen($filename,"w");
 	if($handle === FALSE){
@@ -278,8 +285,8 @@ function write_icalendar($name,$data){
 	fwrite($handle,"PRODID:Calendar Script\r\n");
 	foreach($data->events as $item){
 		fwrite($handle,"BEGIN:VEVENT\r\n");
-		fwrite($handle,"DTSTART:".date("Ymd\THi\Z",$item->{"start-time"})."\r\n");
-		fwrite($handle,"DTEND:".date("Ymd\YHi\Z",$item->{"end-time"})."\r\n");
+		fwrite($handle,"DTSTART:".gmdate("Ymd\THis\Z",$item->{"start-time"})."\r\n");
+		fwrite($handle,"DTEND:".gmdate("Ymd\THis\Z",$item->{"end-time"})."\r\n");
 		fwrite($handle,icalendar_wrap("SUMMARY:".$item->name)."\r\n");
 		if(isset($item->description)){
 			fwrite($handle,icalendar_wrap("DESCRIPTION:".$item->description)."\r\n");
@@ -348,11 +355,12 @@ function write_rss($name,$data){
 
 					if(isset($item->url)){
 						$ellink = $doc->createElement("link",$item->url);
+						$elitem->appendChild($ellink);
 					}
 
 					$description =
-							"<p>From ".date("D d M Y \a\\t H:i",$item->{"start-time"})."</p>"
-							."<p>Until ".date("D d M Y \a\\t H:i",$item->{"end-time"})."</p>";
+							"<p>From ".date("H:i T \o\\n D d M Y",$item->{"start-time"})."</p>"
+							."<p>Until ".date("H:i T \o\\n D d M Y",$item->{"end-time"})."</p>";
 					if(isset($item->description)){
 						$description .= "<p>".$item->description."</p>";
 					}
@@ -430,12 +438,10 @@ function write_xml($name,$data){
 					$elname = $doc->createElement("name",$item->name);
 					$elevent->appendChild($elname);
 					
-					$starttime = new DateTime("@".$item->{"start-time"});
-					$elstarttime = $doc->createElement("start-time",$starttime->format(DateTime::ISO8601));
+					$elstarttime = $doc->createElement("start-time",date("c",$item->{"start-time"}));
 					$elevent->appendChild($elstarttime);
 					
-					$endtime = new DateTime("@".$item->{"end-time"});
-					$elendtime = $doc->createElement("end-time",$endtime->format(DateTime::ISO8601));
+					$elendtime = $doc->createElement("end-time",date("c",$item->{"start-time"}));
 					$elevent->appendChild($elendtime);
 					
 					if(isset($item->description)){

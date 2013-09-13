@@ -11,14 +11,14 @@
 		},
 		{
 			"name": "Midnight Rave",
-			"start-time": "2013-09-15T00:00+00",
-			"end-time": "2013-09-16T06:00+00",
+			"start-time": "2013-09-15T00:00+01",
+			"end-time": "2013-09-16T06:00+01",
 			"url": "http://example.com"
 		},
 		{
 			"name": "Flying Lessons!",
-			"start-time": "2013-10-05T12:00+00",
-			"end-time": "2013-10-05T15:00+00",
+			"start-time": "2013-11-05T12:00+00",
+			"end-time": "2013-11-05T15:00+00",
 			"description": "Come and learn how to fly for real!",
 			"url": "http://yahoo.com"
 		}
