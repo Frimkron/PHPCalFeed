@@ -1,8 +1,14 @@
 <?php
 
-// TODO: proper date formatting for timezone
-//		html
+// TODO: check for json and mbstring modules for json input/output
 // TODO: proper character encoding
+//		if mbstring enabled:
+//			detect encoding of input file
+//			convert data to utf8
+//			output utf8 data
+//		else:
+//			assume windows-1252 encoding
+//			output windows-1252 data
 // TODO: apply polymorphism
 // TODO: output events in time order
 // TODO: don't output events in past
@@ -41,7 +47,8 @@ function input_json_if_necessary($name,$updated){
 	}
 	$json = fread($handle,filesize($filename));
 	fclose($handle);
-
+	
+	$json = do_character_encoding($json);
 	$data = json_decode($json);
 	if($data===NULL){
 		return "JSON: Error in syntax";
@@ -86,9 +93,14 @@ function make_html_fragment($doc,$data){
 		if(isset($data->name)){
 			$eltitle = $doc->createElement("h2");
 			$eltitle->setAttribute("class","cal-title");
-				$eltitlelink = $doc->createElement("a",$data->name);
-				$eltitlelink->setAttribute("href",$data->url);
-				$eltitle->appendChild($eltitlelink);
+				if(isset($data->url)){
+					$eltitlelink = $doc->createElement("a",$data->name);
+					$eltitlelink->setAttribute("href",$data->url);
+					$eltitle->appendChild($eltitlelink);
+				}else{
+					$txtitle = $doc->createTextNode($data->name);
+					$eltitle->appendChild($txtitle);
+				}
 			$elcontainer->appendChild($eltitle);
 		}
 
@@ -116,9 +128,47 @@ function make_html_fragment($doc,$data){
 				}
 				$elevent->appendChild($eltitle);
 
-				$endtime = strtotime($item->{"end-time"});
-				$eltime = $doc->createElement("p",date("D d M Y, H:i",$item->{"start-time"})." - ".date("D d M Y, H:i",$item->{"end-time"}));
+				$eltime = $doc->createElement("p");
 				$eltime->setAttribute("class","cal-event-time");
+
+					$elstartdatetime = $doc->createElement("div");
+					$elstartdatetime->setAttribute("class","cal-start-time");
+						
+						$txfrom = $doc->createTextNode("From ");
+						$elstartdatetime->appendChild($txfrom);
+						
+						$elstarttime = $doc->createElement("span",date("H:i T",$item->{"start-time"}));
+						$elstarttime->setAttribute("class","cal-time");
+						$elstartdatetime->appendChild($elstarttime);
+						
+						$txon = $doc->createTextNode(" on ");
+						$elstartdatetime->appendChild($txon);
+						
+						$elstartdate = $doc->createElement("span",date("D d M Y",$item->{"start-time"}));
+						$elstartdate->setAttribute("class","cal-date");
+						$elstartdatetime->appendChild($elstartdate);
+					
+					$eltime->appendChild($elstartdatetime);
+						
+					$elenddatetime = $doc->createElement("div");
+					$elenddatetime->setAttribute("class","cal-end-time");
+						
+						$txuntil = $doc->createTextNode(" Until ");
+						$elenddatetime->appendChild($txuntil);
+						
+						$elendtime = $doc->createElement("span",date("H:i T",$item->{"end-time"}));
+						$elendtime->setAttribute("class","cal-time");
+						$elenddatetime->appendChild($elendtime);
+						
+						$txon = $doc->createTextNode(" on ");
+						$elenddatetime->appendChild($txon);
+						
+						$elenddate = $doc->createElement("span",date("D d M Y",$item->{"end-time"}));
+						$elenddate->setAttribute("class","cal-date");
+						$elenddatetime->appendChild($elenddate);
+												
+					$eltime->appendChild($elenddatetime);
+										
 				$elevent->appendChild($eltime);
 
 				if(isset($item->description)){
@@ -132,6 +182,10 @@ function make_html_fragment($doc,$data){
 		$elcontainer->appendChild($elevents);
 
 	return $elcontainer;
+}
+
+function available_html(){
+	return TRUE;
 }
 
 function mimetypes_html(){
@@ -208,7 +262,7 @@ function write_html_full($name,$data){
 
 function output_html_full($name){
 	$ctypes = mimetypes_html();
-	header("Content-Type: ".$ctypes[0]);
+	header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
 	$filename = filename_html_full($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;
@@ -221,6 +275,10 @@ function handle_html_full($name){
 	if($error) return $error;
 	$error = output_html_full($name);
 	if($error) return $error;
+}
+
+function available_json(){
+	return extension_loaded("mbstring") && extension_loaded("json");
 }
 
 function mimetypes_json(){
@@ -247,7 +305,8 @@ function write_json($name,$data){
 }
 
 function output_json($name){
-	header("Content-Type: application/json");
+	$ctypes = mimetypes_json();
+	header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
 	$filename = filename_json($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;
@@ -260,6 +319,10 @@ function handle_json($name){
 	if($error) return $error;
 	$error = output_json($name);
 	if($error) return $error;
+}
+
+function available_icalendar(){
+	return TRUE;
 }
 
 function mimetypes_icalendar(){
@@ -302,7 +365,7 @@ function write_icalendar($name,$data){
 
 function output_icalendar($name){
 	$ctypes = mimetypes_icalendar();
-	header("Content-Type: ".$ctypes[0]);
+	header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
 	$filename = filename_icalendar($name);
 	if( @readfile($filename) === FALSE){
 		return "Error reading ".$filename;
@@ -315,6 +378,10 @@ function handle_icalendar($name){
 	if($error) return $error;
 	$error = output_icalendar($name);
 	if($error) return $error;
+}
+
+function available_rss(){
+	return TRUE;
 }
 
 function mimetypes_rss(){
@@ -331,6 +398,7 @@ function write_rss($name,$data){
 
 	$elrss = $doc->createElement("rss");
 	$elrss->setAttribute("version","2.0");
+	$doc->encoding = character_encoding_of_output();
 
 		$elchannel = $doc->createElement("channel");
 
@@ -383,7 +451,7 @@ function write_rss($name,$data){
 
 function output_rss($name){
 	$ctypes = mimetypes_rss();
-	header("Content-Type: ".$ctypes[0]);
+	header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
 	$filename = filename_rss($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;
@@ -396,6 +464,10 @@ function handle_rss($name){
 	if($error) return $error;
 	$error = output_rss($name);
 	if($error) return $error;
+}
+
+function available_xml(){
+	return TRUE;
 }
 
 function mimetypes_xml(){
@@ -413,6 +485,7 @@ function write_xml($name,$data){
 	$dom = new DOMImplementation();
 	
 	$doc = $dom->createDocument();
+	$doc->encoding = character_encoding_of_output();
 		
 		$elcalendar = $doc->createElement("calendar");
 		$elcalendar->setAttributeNS("http://www.w3.org/2001/XMLSchema-instance",
@@ -441,7 +514,7 @@ function write_xml($name,$data){
 					$elstarttime = $doc->createElement("start-time",date("c",$item->{"start-time"}));
 					$elevent->appendChild($elstarttime);
 					
-					$elendtime = $doc->createElement("end-time",date("c",$item->{"start-time"}));
+					$elendtime = $doc->createElement("end-time",date("c",$item->{"end-time"}));
 					$elevent->appendChild($elendtime);
 					
 					if(isset($item->description)){
@@ -469,7 +542,7 @@ function write_xml($name,$data){
 
 function output_xml($name){
 	$ctypes = mimetypes_xml();
-	header("Content-Type: ".$ctypes[0]);
+	header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
 	$filename = filename_xml($name);
 	if( @readfile($filename) === FALSE ){
 		return "Error reading ".$filename;	
@@ -484,6 +557,23 @@ function handle_xml($name){
 	if($error) return $error;
 }
 
+function character_encoding_of_output(){
+	return extension_loaded("mbstring") ? "UTF-8" : "Windows-1252";
+}
+
+function do_character_encoding($rawtext){
+	if(extension_loaded("mbstring")){
+		$encoding = mb_detect_encoding($rawtext);
+		$newencoding = character_encoding_of_output();
+		if($encoding != $newencoding){ 
+			$rawtext = mb_convert_encoding($rawtext,
+				$encoding===FALSE ? "Windows-1252" : $encoding, $newencoding);
+		}
+	}
+	// otherwise assume win-1252 encoding
+	return $rawtext;
+}
+
 function update_cached_if_necessary($name,$filename){
 	if(file_exists($filename)){
 		$updated = filemtime($filename);
@@ -493,21 +583,34 @@ function update_cached_if_necessary($name,$filename){
 	}else{
 		$updated = 0;
 	}
+	// TODO: alternative input format if json not available
 	$data = input_json_if_necessary($name,$updated);
 	if(is_string($data)) return $data;
 	if(is_object($data)) {
-		$error = write_html_frag($name,$data);
-		if($error) return $error;
-		$error = write_json($name,$data);
-		if($error) return $error;
-		$error = write_html_full($name,$data);
-		if($error) return $error;
-		$error = write_icalendar($name,$data);
-		if($error) return $error;
-		$error = write_rss($name,$data);
-		if($error) return $error;
-		$error = write_xml($name,$data);
-		if($error) return $error;
+		if(available_html()){
+			$error = write_html_frag($name,$data);
+			if($error) return $error;
+		}
+		if(available_json()){
+			$error = write_json($name,$data);
+			if($error) return $error;
+		}
+		if(available_html()){
+			$error = write_html_full($name,$data);
+			if($error) return $error;
+		}
+		if(available_icalendar()){
+			$error = write_icalendar($name,$data);
+			if($error) return $error;
+		}
+		if(available_rss()){
+			$error = write_rss($name,$data);
+			if($error) return $error;
+		}
+		if(available_xml()){
+			$error = write_xml($name,$data);
+			if($error) return $error;
+		}
 	}
 }
 
@@ -550,13 +653,24 @@ function establish_output_format(){
 
 $name = basename(__FILE__,".php");
 
-switch(establish_output_format()){
-	case "json":			$error = handle_json($name);		break;
-	case "html-fragment":	$error = handle_html_frag($name);	break;
-	case "icalendar":		$error = handle_icalendar($name);	break;
-	case "rss":				$error = handle_rss($name);			break;
-	case "xml":				$error = handle_xml($name);			break;
-	default:				$error = handle_html_full($name);	break;
-}
+$output_format = establish_output_format();
+
+if($output_format=="json" && available_json()) 
+	$error = handle_json($name);
+	
+elseif($output_format=="html-fragment" && available_html()) 	
+	$error = handle_html_frag($name);
+	
+elseif($output_format=="icalendar" && available_icalendar())
+	$error = handle_icalendar($name);
+	
+elseif($output_format=="rss" && available_rss())
+	$error = handle_rss($name);
+	
+elseif($output_format=="xml" && available_xml())
+	$error = handle_xml($name);
+	
+else
+	$error = handle_html_full($name);
 
 if($error) die($error);

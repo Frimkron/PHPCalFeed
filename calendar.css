@@ -1,2 +1,7 @@
 body { font-family: cursive; font-size: 10pt; font-color: blue; background-color: rgb(150,200,200); }
-.cal-container { border: 2px solid black; width: 30em; margin: 0 auto; }
+.cal-container { border: 2px solid black; width: 30em; margin: 0 auto; padding: 1em; }
+.cal-event { margin: 1em; border-top: 2px solid black; }
+.cal-event-time { margin: 0.25em 0; }
+.cal-start-time, .cal-end-time { margin-left: 2em; }
+.cal-date { font-weight: bold; }
+.cal-time { font-weight: bold; }
