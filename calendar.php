@@ -1,6 +1,8 @@
 <?php
 
 // TODO: improve class structure - tda
+// TODO: xml outputs should check for necessary modules
+// TODO: probably shouldn't default to html - give appropriate "not acceptable" response
 // TODO: output events in time order
 // TODO: don't output events in past
 // TODO: recurring events
@@ -78,7 +80,19 @@ function input_json_if_necessary($name,$updated){
 
 abstract class OutputFormat {
 
-	public function handle($name,$output_formats){
+	public abstract function write_file_if_possible($scriptname,$data);
+
+	public abstract function attempt_handle_include($scriptname,$output_formats);
+
+	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats);
+	
+	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats);
+
+	protected abstract function get_filename($scriptname);
+	
+	protected abstract function output($scriptname);
+
+	protected function handle($scriptname,$output_formats){
 		$filename = $this->get_filename($name);
 		$error = update_cached_if_necessary($name,$filename,$output_formats);
 		if($error) return $error;
@@ -89,14 +103,6 @@ abstract class OutputFormat {
 }
 
 abstract class HtmlOutputBase extends OutputFormat {
-
-	public function is_available(){
-		return TRUE;
-	}
-	
-	public function get_mime_types(){
-		return array("text/html");
-	}
 
 	protected function make_html_fragment($doc,$data){
 	
@@ -200,11 +206,26 @@ abstract class HtmlOutputBase extends OutputFormat {
 
 class HtmlFullOutput extends HtmlOutputBase {
 
-	public function get_filename($name){
+	public function attempt_handle_include($scriptname,$output_formats){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="html") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		if(!in_array($mimetype,array("text/html")) return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+
+	protected function get_filename($name){
 		return $name.".html";
 	}
 
-	public function write_file($name,$data){
+	public function write_file_if_possible($scriptname,$data){
+	
 		$dom = new DOMImplementation();
 	
 		$doctype = $dom->createDocumentType("html","","");
@@ -234,16 +255,15 @@ class HtmlFullOutput extends HtmlOutputBase {
 			$elhtml->appendChild($elbody);
 		$doc->appendChild($elhtml);
 	
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		$doc->formatOutput = TRUE;
 		if( @$doc->saveHTMLFile($filename) === FALSE){
 			return "Failed to write ".$filename;
 		}
 	}
-	
-	public function output($name){
-		$ctypes = $this->get_mime_types();
-		header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
+		
+	public function output($scriptname){
+		header("Content-Type: text/html; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($name);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
@@ -253,19 +273,33 @@ class HtmlFullOutput extends HtmlOutputBase {
 
 class HtmlFragOutput extends HtmlOutputBase {
 
-	public function get_filename($name){
-		return $name."-frag.html";	
+	public function attempt_handle_include($scriptname,$output_formats){
+		return $this->handle($scriptname,$output_formats);
 	}
 	
-	public function write_file($name,$data){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="html-frag") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		return FALSE;
+	}
+
+	protected function get_filename($scriptname){
+		return $scriptname."-frag.html";	
+	}
+	
+	public function write_file_if_possible($scriptname,$data){
+	
 		$doc = new DOMDocument();
 		$doc->appendChild( $this->make_html_fragment($doc,$data) );
 		$doc->formatOutput = TRUE;
- 		$doc->saveHTMLFile($this->get_filename($name));
+ 		$doc->saveHTMLFile($this->get_filename($scriptname));
 	}
 	
-	public function output($name){
-		$filename = $this->get_filename($name);
+	public function output($scriptname){
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -274,25 +308,27 @@ class HtmlFragOutput extends HtmlOutputBase {
 
 class JsonOutput extends OutputFormat {
 
-	public function is_available(){
+	private function is_available(){
 		return extension_loaded("mbstring") && extension_loaded("json");
 	}
 
-	public function get_mime_types(){
-		return array("application/json","text/json");
-	}
+	//public function get_mime_types(){
+	//	return array("application/json","text/json");
+	//}
 
-	public function get_filename($name){
-		return $name.".json";	
+	protected function get_filename($scriptname){
+		return $scriptname.".json";	
 	}
 	
-	public function write_file($name,$data){
+	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
+		
 		$data = unserialize(serialize($data)); //deep copy
 		foreach($data->events as $item){
 			$item->{"start-time"} = date("c",$item->{"start-time"});
 			$item->{"end-time"} = date("c",$item->{"end-time"});
 		}
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		$handle = @fopen($filename,"w");
 		if($handle === FALSE){
 			return "Failed to open ".$filename." for writing";
@@ -301,10 +337,9 @@ class JsonOutput extends OutputFormat {
 		fclose($handle);
 	}
 	
-	public function output($name){
-		$ctypes = $this->get_mime_types();
-		header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($name);
+	public function output($scriptname){
+		header("Content-Type: application/json; charset=".character_encoding_of_output());
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -313,15 +348,7 @@ class JsonOutput extends OutputFormat {
 
 class ICalendarOutput extends OutputFormat {
 
-	public function is_available(){
-		return TRUE;
-	}
-
-	public function get_mime_types(){
-		return array("text/calendar");
-	}
-
-	public function get_filename($name){
+	protected function get_filename($name){
 		return $name.".ical";
 	}
 	
@@ -329,8 +356,8 @@ class ICalendarOutput extends OutputFormat {
 		return preg_replace("/[^\n\r]{75}/","$0\r\n ",$text);
 	}
 	
-	public function write_file($name,$data){
-		$filename = $this->get_filename($name);
+	public function write_file_if_possible($scriptname,$data){
+		$filename = $this->get_filename($scriptname);
 		$handle = fopen($filename,"w");
 		if($handle === FALSE){
 			return "Failed to open ".$filename." for writing";
@@ -355,10 +382,9 @@ class ICalendarOutput extends OutputFormat {
 		fclose($handle);
 	}
 	
-	public function output($name){
-		$ctypes = $this->get_mime_types();
-		header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($name);
+	public function output($scriptname){
+		header("Content-Type: text/calendar; charset=".character_encoding_of_output());
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE){
 			return "Error reading ".$filename;
 		}
@@ -367,19 +393,11 @@ class ICalendarOutput extends OutputFormat {
 
 class RssOutput extends OutputFormat {
 
-	public function is_available(){
-		return TRUE;
+	protected function get_filename($scriptname){
+		return $scriptname.".rss";
 	}
 	
-	public function get_mime_types(){
-		return array("application/rss+xml","application/rss");
-	}
-
-	public function get_filename($name){
-		return $name.".rss";
-	}
-	
-	public function write_file($name,$data){
+	public function write_file_if_possible($scriptname,$data){
 		$doc = new DOMDocument();
 	
 		$elrss = $doc->createElement("rss");
@@ -428,17 +446,16 @@ class RssOutput extends OutputFormat {
 	
 		$doc->appendChild($elrss);
 	
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		$doc->formatOutput = TRUE;
 		if( @$doc->save($filename) === FALSE ){
 			return "Failed to write ".$filename;
 		}
 	}
 	
-	public function output($name){
-		$ctypes = $this->get_mime_types();
-		header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($name);
+	public function output($scriptname){
+		header("Content-Type: application/rss+xml; charset=".character_encoding_of_output());
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -447,19 +464,11 @@ class RssOutput extends OutputFormat {
 
 class XmlOutput extends OutputFormat {
 
-	public function is_available(){
-		return TRUE;
+	protected function get_filename($scriptname){
+		return $scriptname.".xml";
 	}
 	
-	public function get_mime_types(){
-		return array("application/xml","text/xml");
-	}
-		
-	public function get_filename($name){
-		return $name.".xml";
-	}
-	
-	public function write_file($name,$data){
+	public function write_file_if_possible($scriptname,$data){
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
 		
@@ -514,16 +523,15 @@ class XmlOutput extends OutputFormat {
 	
 		$doc->createAttributeNS($namespace,"xmlns");
 		
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		$doc->formatOutput = TRUE;
 		if( @$doc->save($filename) === FALSE ){
 			return "Failed to write ".$filename;
 		}
 	}	
 	
-	public function output($name){
-		$ctypes = $this->get_mime_types();
-		header("Content-Type: ".$ctypes[0]."; charset=".character_encoding_of_output());
+	public function output($scriptname){
+		header("Content-Type: application/xml; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($name);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;	
@@ -548,7 +556,7 @@ function do_character_encoding($rawtext){
 	return $rawtext;
 }
 
-function update_cached_if_necessary($name,$filename,$output_formats){
+function update_cached_if_necessary($scriptname,$filename,$output_formats){
 	if(file_exists($filename)){
 		$updated = filemtime($filename);
 		if($updated === FALSE){
@@ -558,73 +566,76 @@ function update_cached_if_necessary($name,$filename,$output_formats){
 		$updated = 0;
 	}
 	// TODO: alternative input format if json not available
-	$data = input_json_if_necessary($name,$updated);
+	$data = input_json_if_necessary($scriptname,$updated);
 	if(is_string($data)) return $data;
 	if(is_object($data)) {
-		foreach($output_formats as $fname=>$format){
-			if($format->is_available()){
-				$error = $format->write_file($name,$data);
-				if($error) return $error;
-			}
+		foreach($output_formats as $format){
+			$error = $format->write_file_if_possible($scriptname,$data);
+			if($error) return $error;
 		}
 	}
 }
 
-function establish_output_format($output_formats,$default,$on_include){
-	// accessed directly
-	if(basename(__FILE__) == basename($_SERVER["SCRIPT_FILENAME"])){
-		// format parameter specified
-		if(array_key_exists("format",$_GET)){
-			$param = $_GET["format"];
-			if(array_key_exists($param,$output_formats) && $output_formats[$param]->is_available()){
-				return $output_formats[$param];
-			}else{
-				return $default;
-			}
-		// content negotiation
-		}else{
-			$acceptlist = array();
-			foreach(explode(",",$_SERVER["HTTP_ACCEPT"]) as $accept){
-				$accept = trim(strtolower($accept));
-				if(strpos($accept,";q=")){
-					$bits = explode(";q=",$accept);
-					$accept = $bits[0];
-					$quality = floatval($bits[1]);
-				}else{
-					$quality = 1.0;
-				}
-				$acceptlist[$accept] = $quality;
-			}
-			arsort($acceptlist);
-			foreach($acceptlist as $accept => $quality){
-				foreach($output_formats as $name=>$format){
-					if($format->is_available() && in_array($accept,$format->get_mime_types())){
-						return $format;
-					}
-				}
-			}
-			return $default;
-		}
+function attempt_handle($scriptname,$output_formats){
+
 	// included from another script
-	}else{
-		return $on_include;
-	}	
+	if(basename(__FILE__) != basename($_SERVER["SCRIPT_FILENAME"])){
+		foreach($output_formats as $format){
+			$result = $format->attempt_handle_include($scriptname,$output_formats);
+			if($result===FALSE) continue; // wasn't handled
+			if($result) return $result;   // handled, got error
+			return;                       // handled, all done
+		}
+	}
+	// format parameter specified
+	if(array_key_exists("format",$_GET)){
+		$formatname = $_GET["format"];
+		foreach($output_formats as $format){
+			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats);
+			if($result===FALSE) continue; // wasn't handled
+			if($result) return $result;   // handled, got error
+			return;                       // handled, all done
+		}			
+	}
+	// content negotiation
+	$acceptlist = array();
+	foreach(explode(",",$_SERVER["HTTP_ACCEPT"]) as $accept){
+		$accept = trim(strtolower($accept));
+		if(strpos($accept,";q=")){
+			$bits = explode(";q=",$accept);
+			$accept = $bits[0];
+			$quality = floatval($bits[1]);
+		}else{
+			$quality = 1.0;
+		}
+		$acceptlist[$accept] = $quality;
+	}
+	arsort($acceptlist);
+	foreach($acceptlist as $accept => $quality){
+		foreach($output_formats as $format){
+			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats);
+			if($result===FALSE) continue; // wasn't handled
+			if($result) return $result;   // handled, got error
+			return;                       // handled, all done
+		}
+	}
+	// exhausted ways to handle request
+	return FALSE;
 }
 
 
 $output_formats = array(
-	"html"		=> new HtmlFullOutput(),
-	"html-frag"	=> new HtmlFragOutput(),
-	"json"		=> new JsonOutput(),
-	"icalendar"	=> new ICalendarOutput(),
-	"rss"		=> new RssOutput(),
-	"xml"		=> new XmlOutput()
+	new HtmlFullOutput(),
+	new HtmlFragOutput(),
+	new JsonOutput(),
+	new ICalendarOutput(),
+	new RssOutput(),
+	new XmlOutput()
 );
 
-$name = basename(__FILE__,".php");
-
-$outformat = establish_output_format($output_formats,$output_formats["html"],$output_formats["html-frag"]);
-if(!$outformat->is_available()) die("Fell back on unavailable format");
-
-$error = $outformat->handle($name,$output_formats);
-if($error) die($error);
+$result = attempt_handle(basename(__FILE__,".php"),$output_format);
+if($result===FALSE){
+	header("HTTP/1.0 406 Not Acceptable");	
+}elseif($error){
+	die($error);
+}
