@@ -29,8 +29,8 @@
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
 
-function input_json_if_necessary($name,$updated){
-	$filename = $name."-master.json";
+function input_json_if_necessary($scriptname,$updated){
+	$filename = $scriptname."-master.json";
 	if(filemtime($filename) <= $updated){
 		return FALSE;
 	}
@@ -93,10 +93,10 @@ abstract class OutputFormat {
 	protected abstract function output($scriptname);
 
 	protected function handle($scriptname,$output_formats){
-		$filename = $this->get_filename($name);
-		$error = update_cached_if_necessary($name,$filename,$output_formats);
+		$filename = $this->get_filename($scriptname);
+		$error = update_cached_if_necessary($scriptname,$filename,$output_formats);
 		if($error) return $error;
-		$error = $this->output($name);
+		$error = $this->output($scriptname);
 		if($error) return $error;
 	}
 
@@ -216,7 +216,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
-		if(!in_array($mimetype,array("text/html")) return FALSE;
+		if(!in_array($mimetype,array("text/html"))) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 
@@ -242,7 +242,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elcss = $doc->createElement("link");
 				$elcss->setAttribute("rel","stylesheet");
 				$elcss->setAttribute("type","text/css");
-				$elcss->setAttribute("href",$name.".css");
+				$elcss->setAttribute("href",$scriptname.".css");
 				$elhead->appendChild($elcss);
 	
 			$elhtml->appendChild($elhead);
@@ -264,7 +264,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 		
 	public function output($scriptname){
 		header("Content-Type: text/html; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -308,13 +308,22 @@ class HtmlFragOutput extends HtmlOutputBase {
 
 class JsonOutput extends OutputFormat {
 
+	public function attempt_handle_include($scriptname,$output_formats){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="json") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		if(!in_array($mimetype,array("application/json","text/json"))) return FALSE;
+	}
+
 	private function is_available(){
 		return extension_loaded("mbstring") && extension_loaded("json");
 	}
-
-	//public function get_mime_types(){
-	//	return array("application/json","text/json");
-	//}
 
 	protected function get_filename($scriptname){
 		return $scriptname.".json";	
@@ -347,6 +356,20 @@ class JsonOutput extends OutputFormat {
 }
 
 class ICalendarOutput extends OutputFormat {
+
+	public function attempt_handle_include($scriptname,$output_formats){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="icalendar") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		if(!in_array($mimetype,array("text/calendar"))) return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
 
 	protected function get_filename($name){
 		return $name.".ical";
@@ -392,6 +415,20 @@ class ICalendarOutput extends OutputFormat {
 }
 
 class RssOutput extends OutputFormat {
+
+	public function attempt_handle_include($scriptname,$output_formats){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="rss") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		if(!in_array($mimetype,array("application/rss+xml","application/rss"))) return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
 
 	protected function get_filename($scriptname){
 		return $scriptname.".rss";
@@ -464,6 +501,20 @@ class RssOutput extends OutputFormat {
 
 class XmlOutput extends OutputFormat {
 
+	public function attempt_handle_include($scriptname,$output_formats){
+		return FALSE;	
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+		if($name!="xml") return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+		if(!in_array($mimetype,array("text/xml","application/xml"))) return FALSE;
+		return $this->handle($scriptname,$output_formats);
+	}
+
 	protected function get_filename($scriptname){
 		return $scriptname.".xml";
 	}
@@ -532,7 +583,7 @@ class XmlOutput extends OutputFormat {
 	
 	public function output($scriptname){
 		header("Content-Type: application/xml; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($name);
+		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;	
 		}
@@ -633,9 +684,9 @@ $output_formats = array(
 	new XmlOutput()
 );
 
-$result = attempt_handle(basename(__FILE__,".php"),$output_format);
+$result = attempt_handle(basename(__FILE__,".php"),$output_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
-}elseif($error){
-	die($error);
+}elseif($result){
+	die($result);
 }
