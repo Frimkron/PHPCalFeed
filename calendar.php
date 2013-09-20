@@ -1,6 +1,11 @@
 <?php
 
 // TODO: recurring events
+//		date: ( [ ([-]nth|every x[+y]) year ][ ([-]nth|every x[+y]) month ][ ([-]nth|every x[+y]) week ][ ([-]nth|every x[+y]) day ] )+
+//		time: hour minute
+//		duration: [ x days ][ x hours ][ x minutes ]
+//      
+// TODO: error page should have 500 status
 // TODO: proper html output with navigation
 // TODO: proper css
 // TODO: input discovery
