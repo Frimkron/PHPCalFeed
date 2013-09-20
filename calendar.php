@@ -1,10 +1,5 @@
 <?php
 
-// TODO: improve class structure - tda
-// TODO: xml outputs should check for necessary modules
-// TODO: probably shouldn't default to html - give appropriate "not acceptable" response
-// TODO: output events in time order
-// TODO: don't output events in past
 // TODO: recurring events
 // TODO: proper html output with navigation
 // TODO: proper css
@@ -28,6 +23,7 @@
 // TODO: icalendar feed name and link?
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
+
 
 function input_json_if_necessary($scriptname,$updated){
 	$filename = $scriptname."-master.json";
@@ -314,11 +310,14 @@ class JsonOutput extends OutputFormat {
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats){
 		if($name!="json") return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
 		if(!in_array($mimetype,array("application/json","text/json"))) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return $this->handle($scriptname,$output_formats);
 	}
 
 	private function is_available(){
@@ -416,17 +415,23 @@ class ICalendarOutput extends OutputFormat {
 
 class RssOutput extends OutputFormat {
 
+	private function is_available(){
+		return extension_loaded("libxml") && extension_loaded("dom");
+	}
+
 	public function attempt_handle_include($scriptname,$output_formats){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats){
 		if($name!="rss") return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
 		if(!in_array($mimetype,array("application/rss+xml","application/rss"))) return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 
@@ -435,6 +440,8 @@ class RssOutput extends OutputFormat {
 	}
 	
 	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
+		
 		$doc = new DOMDocument();
 	
 		$elrss = $doc->createElement("rss");
@@ -501,17 +508,23 @@ class RssOutput extends OutputFormat {
 
 class XmlOutput extends OutputFormat {
 
+	private function is_available(){
+		return extension_loaded("libxml") && extension_loaded("dom");
+	}
+
 	public function attempt_handle_include($scriptname,$output_formats){
 		return FALSE;	
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats){
 		if($name!="xml") return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
 		if(!in_array($mimetype,array("text/xml","application/xml"))) return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats);
 	}
 
@@ -520,6 +533,7 @@ class XmlOutput extends OutputFormat {
 	}
 	
 	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
 		
@@ -607,6 +621,22 @@ function do_character_encoding($rawtext){
 	return $rawtext;
 }
 
+function generate_events($data){
+	$events = $data->events;
+	// sort by date
+	usort($events, function($a,$b){ 
+		if($a->{"start-time"} > $b->{"start-time"}) return 1;
+		elseif($a->{"start-time"} < $b->{"start-time"}) return -1;
+		else return 0;
+	});
+	// filter past and future events
+	$events = array_filter($events,function($item){
+		return $item->{"start-time"} >= time() - 60*24*60*60 // 60 days ago
+			&& $item->{"start-time"} < time() + 2*365*24*60*60; // 2 years from now
+	});
+	return $events;
+}
+
 function update_cached_if_necessary($scriptname,$filename,$output_formats){
 	if(file_exists($filename)){
 		$updated = filemtime($filename);
@@ -618,12 +648,13 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats){
 	}
 	// TODO: alternative input format if json not available
 	$data = input_json_if_necessary($scriptname,$updated);
-	if(is_string($data)) return $data;
-	if(is_object($data)) {
-		foreach($output_formats as $format){
-			$error = $format->write_file_if_possible($scriptname,$data);
-			if($error) return $error;
-		}
+	if(is_string($data)) return $data; // error
+	if($data===FALSE) return;          // not modified
+	
+	$data->events = generate_events($data);
+	foreach($output_formats as $format){
+		$error = $format->write_file_if_possible($scriptname,$data);
+		if($error) return $error;
 	}
 }
 
