@@ -1,7 +1,34 @@
-body { font-family: cursive; font-size: 10pt; font-color: blue; background-color: rgb(150,200,200); }
-.cal-container { border: 2px solid black; width: 30em; margin: 0 auto; padding: 1em; }
-.cal-event { margin: 1em; border-top: 2px solid black; }
+.cal-container { width: 60em; margin: 0 auto; padding: 1em; text-align: center; font-size: 10pt; 
+					color: rgb(64,64,64); font-family: verdana, tahoma, arial, sans-serif; }
+.cal-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 0.25em; }
+.cal-title a, .cal-title a:visited { text-decoration: none; color: rgb(64,64,64); }
+.cal-title a:hover { text-decoration: underline; }
+.cal-calendar { border-top: 2px solid rgb(200,200,200); border-left: 2px solid rgb(200,200,200); border-right: 2px solid rgb(150,150,150);
+				border-bottom: 2px solid rgb(150,150,150); padding: 0; margin: 0; width: 100%; background-color: white; 
+				border-radius: 20px; padding: 0.25em 0.25em 1.0em 0.25em; box-shadow: 2px 5px 5px rgb(200,200,200); }
+.cal-day { border-top: 1px solid rgb(150,150,150); border-left: 1px solid rgb(150,150,150); border-right: 1px solid rgb(200,200,200); 
+				border-bottom: 1px solid rgb(200,200,200); height: 6em; vertical-align: top; text-align: left; 
+				box-shadow: inset 1px 3px 3px rgb(220,220,220); }
+.cal-outside-day { background-color: rgb(220,220,220); }
+.cal-today { border: 3px solid rgb(0,200,200); }
+.cal-day-title { width: 14%; }
+.cal-date { text-align: left; }
+.cal-month-title { text-weight: bold; font-size: 12pt; background-color: rgb(0,200,200); padding: 0.25em; border-radius: 20px; 
+				text-shadow: 0px 1px 1px rgb(255,255,255); }
+.cal-day-title { text-weight: bold; font-size: 10pt; padding: 0.25em; }
+.cal-event { font-size: 8pt; margin: 0.5em; }
+.cal-event a, .cal-event a:visited { text-decoration: none; color: rgb(64,64,64); }
+.cal-event a:hover { text-decoration: underline; }
+.cal-nav-link, .cal-nav-link:visited { display: block; text-decoration: none; padding: 0.5em 0.25em; 
+				border: 1px outset rgb(150,150,150); width: 10em; margin: 0.5em auto; color: rgb(64,64,64); background-color: white; 
+				box-shadow: 1px 2px 2px rgb(200,200,200); }
+.cal-nav-link:hover { background-color: rgb(0,200,200); }
+.cal-nav-link:active { border: 1px inset silver; }
+.cal-back-link { margin-bottom: -2.5em; text-align: left; }
+.cal-forward-link { margin-top: -2.5em; text-align: right; }
+.cal-today-link { margin-top: -2.5em; text-align: center; }
+/*.cal-event { margin: 1em; border-top: 2px solid black; }
 .cal-event-time { margin: 0.25em 0; }
 .cal-start-time, .cal-end-time { margin-left: 2em; }
 .cal-date { font-weight: bold; }
-.cal-time { font-weight: bold; }
+.cal-time { font-weight: bold; }*/
