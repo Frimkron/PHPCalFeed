@@ -105,8 +105,23 @@ abstract class OutputFormat {
 
 abstract class HtmlOutputBase extends OutputFormat {
 
+	private function int_param($name,$min,$max,$default){
+		if(!isset($_GET[$name])) return $default;
+		if(!is_int($_GET[$name])) return $default;
+		if($_GET[$name] < $min) return $default;
+		if($_GET[$name] > $max) return $default;
+		return $_GET[$name];
+	}
+
 	protected function make_html_fragment($doc,$data){
 	
+		$now = getdate();
+		$year = $this->int_param("calyr",0,9999,$now["year"]);
+		$month = $this->int_param("calmn",1,12,$now["mon"]);
+		
+		$monthname = getdate(strtotime($year."-".$month."-1"))["month"];
+		$lastmonthname = getdate(
+			
 		$elcontainer = $doc->createElement("div");
 		$elcontainer->setAttribute("class","cal-container");
 	
@@ -194,6 +209,21 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcalendar->appendChild($eltbody);
 			
 			$elcontainer->appendChild($elcalendar);
+			
+			$elbacklink = $doc->createElement("a", "December 2012"); // TODO
+			$elbacklink->setAttribute("class","cal-nav-link cal-back-link");
+			$elbacklink->setAttribute("href","#"); // TODO
+			$elcontainer->appendChild($elbacklink);
+			
+			$eltodaylink = $doc->createElement("a", "Today");
+			$eltodaylink->setAttribute("class","cal-nav-link cal-today-link");
+			$eltodaylink->setAttribute("href","#"); // TODO
+			$elcontainer->appendChild($eltodaylink);
+			
+			$elforwardlink = $doc->createElement("a", "February 2013"); // TODO
+			$elforwardlink->setAttribute("class","cal-nav-link cal-forward-link");
+			$elforwardlink->setAttribute("href","#"); // TODO
+			$elcontainer->appendChild($elforwardlink);
 	
 		return $elcontainer;
 	}
