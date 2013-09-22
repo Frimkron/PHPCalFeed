@@ -130,76 +130,70 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcontainer->appendChild($eldescription);
 			}
 	
-			$elevents = $doc->createElement("div");
-			$elevents->setAttribute("class","cal-event-list");
-			foreach($data->events as $item){
-				$elevent = $doc->createElement("div");
-				$elevent->setAttribute("class","cal-event");
-	
-					$eltitle = $doc->createElement("h3");
-					$eltitle->setAttribute("class","cal-event-title");
-					if(isset($item->url)){
-						$eltitlelink = $doc->createElement("a",$item->name);
-						$eltitlelink->setAttribute("href",$item->url);
-						$eltitle->appendChild($eltitlelink);
-					}else{
-						$titletext = $doc->createTextNode($item->name);
-						$eltitle->appendChild($titletext);
-					}
-					$elevent->appendChild($eltitle);
-	
-					$eltime = $doc->createElement("p");
-					$eltime->setAttribute("class","cal-event-time");
-	
-						$elstartdatetime = $doc->createElement("div");
-						$elstartdatetime->setAttribute("class","cal-start-time");
-							
-							$txfrom = $doc->createTextNode("From ");
-							$elstartdatetime->appendChild($txfrom);
-							
-							$elstarttime = $doc->createElement("span",date("H:i T",$item->{"start-time"}));
-							$elstarttime->setAttribute("class","cal-time");
-							$elstartdatetime->appendChild($elstarttime);
-							
-							$txon = $doc->createTextNode(" on ");
-							$elstartdatetime->appendChild($txon);
-							
-							$elstartdate = $doc->createElement("span",date("D d M Y",$item->{"start-time"}));
-							$elstartdate->setAttribute("class","cal-date");
-							$elstartdatetime->appendChild($elstartdate);
+			$elcalendar = $doc->createElement("table");
+			$elcalendar->setAttribute("class","cal-calendar");
+			
+				$elthead = $doc->createElement("thead");
+				
+					$elrow = $doc->createElement("tr");
+					$elrow->setAttribute("class","cal-header");
+					
+						$elmonthtitle = $doc->createElement("th","January 2013"); //TODO
+						$elmonthtitle->setAttribute("class","cal-month-title");
+						$elmonthtitle->setAttribute("colspan","7");
+						$elrow->appendChild($elmonthtitle);
+																	
+					$elthead->appendChild($elrow);
+					
+					$elrow = $doc->createElement("tr");
+					$elrow->setAttribute("class","cal-header");
+					
+						foreach(array("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday") as $dayname){
+							$eldaytitle = $doc->createElement("th",$dayname);
+							$eldaytitle->setAttribute("class","cal-day-title");
+							$elrow->appendChild($eldaytitle);
+						}
+					
+					$elthead->appendChild($elrow);
+				
+				$elcalendar->appendChild($elthead);
+				
+				$eltbody = $doc->createElement("tbody");
+				$eltbody->setAttribute("class","cal-weeks");
+				
+					// TODO
+					$weeks = array(
+						array( array("date"=>30), array("date"=>31), array("date"=>1), array("date"=>2), array("date"=>3), array("date"=>4), array("date"=>5) ),
+						array( array("date"=>6), array("date"=>7), array("date"=>8), array("date"=>9), array("date"=>10), array("date"=>11), array("date"=>12) ),
+						array( array("date"=>13), array("date"=>14), array("date"=>15), array("date"=>16), array("date"=>17), array("date"=>18), array("date"=>19) ),
+						array( array("date"=>20), array("date"=>21), array("date"=>22), array("date"=>23), array("date"=>24), array("date"=>25), array("date"=>26) ),
+						array( array("date"=>27), array("date"=>28), array("date"=>29), array("date"=>30), array("date"=>31), array("date"=>1), array("date"=>2) ),
+					);
+				
+					foreach($weeks as $week){
 						
-						$eltime->appendChild($elstartdatetime);
+						$elweek = $doc->createElement("tr");
+						$elweek->setAttribute("class","cal-week");
+						
+							foreach($week as $day){
 							
-						$elenddatetime = $doc->createElement("div");
-						$elenddatetime->setAttribute("class","cal-end-time");
-							
-							$txuntil = $doc->createTextNode(" Until ");
-							$elenddatetime->appendChild($txuntil);
-							
-							$elendtime = $doc->createElement("span",date("H:i T",$item->{"end-time"}));
-							$elendtime->setAttribute("class","cal-time");
-							$elenddatetime->appendChild($elendtime);
-							
-							$txon = $doc->createTextNode(" on ");
-							$elenddatetime->appendChild($txon);
-							
-							$elenddate = $doc->createElement("span",date("D d M Y",$item->{"end-time"}));
-							$elenddate->setAttribute("class","cal-date");
-							$elenddatetime->appendChild($elenddate);
-													
-						$eltime->appendChild($elenddatetime);
-											
-					$elevent->appendChild($eltime);
-	
-					if(isset($item->description)){
-						$eldescription = $doc->createElement("p",$item->description);
-						$eldescription->setAttribute("class","cal-event-description");
-						$elevent->appendChild($eldescription);
+								$elday = $doc->createElement("td");
+								$elday->setAttribute("class","cal-day");
+								
+									$eldate = $doc->createElement("div",$day["date"]);
+									$eldate->setAttribute("class","cal-date");									
+									$elday->appendChild($eldate);
+								
+								$elweek->appendChild($elday);
+							}
+						
+						$eltbody->appendChild($elweek);
+						
 					}
-	
-				$elevents->appendChild($elevent);
-			}
-			$elcontainer->appendChild($elevents);
+				
+				$elcalendar->appendChild($eltbody);
+			
+			$elcontainer->appendChild($elcalendar);
 	
 		return $elcontainer;
 	}
