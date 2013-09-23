@@ -1,5 +1,11 @@
 <?php
 
+// TODO: html format can't be dynamic view if cached to filesystem
+//		use javascript?
+//		any kind of html 5 component for hidden panels?
+//		static implementation can't be limited in timespan
+//		can't cache current day marker
+// TODO: recurring events present caching issue - when are more events added? Daily?
 // TODO: recurring events
 //		date: ( [ ([-]nth|every x[+y]) year ][ ([-]nth|every x[+y]) month ][ ([-]nth|every x[+y]) week ][ ([-]nth|every x[+y]) day ] )+
 //		time: hour minute
@@ -112,15 +118,43 @@ abstract class HtmlOutputBase extends OutputFormat {
 		if($_GET[$name] > $max) return $default;
 		return $_GET[$name];
 	}
+	
+	private function make_cal_url($year,$month){
+		$url = parse_url($_SERVER["REQUEST_URI"]);
+		$params = array();
+		foreach(explode("&",$url["query"]) as $nameval){
+			$bits = explode("=",$nameval);
+			$params[$bits[0]] = $bits[1];		
+		}
+		$params["calyr"] = $year;
+		$params["calmn"] = $month;
+		$toimplode = array();
+		foreach($params as $name=>$val){
+			array_push($toimplode,$name."=".$val);
+		}
+		return $url["path"]."?".implode("&",$toimplode);
+	}
 
 	protected function make_html_fragment($doc,$data){
 	
-		$now = getdate();
-		$year = $this->int_param("calyr",0,9999,$now["year"]);
-		$month = $this->int_param("calmn",1,12,$now["mon"]);
-		
+		$nowinfo = getdate();
+		$year = $this->int_param("calyr",0,9999,$nowinfo["year"]);
+		$month = $this->int_param("calmn",1,12,$nowinfo["mon"]);		
 		$monthname = getdate(strtotime($year."-".$month."-1"))["month"];
-		$lastmonthname = getdate(
+		
+		$lastinfo = getdate(strtotime($year."-".$month."-1 - 1 month"));
+		$lastyear = $lastinfo["year"];
+		$lastmonth = $lastinfo["mon"];
+		$lastmonthname = $lastinfo["month"];
+		
+		$nextinfo = getdate(strtotime($year."-".$month."-1 + 1 month"));
+		$nextyear = $nextinfo["year"];
+		$nextmonth = $nextinfo["mon"];
+		$nextmonthname = $nextinfo["month"];
+		
+		$todayyear = $nowinfo["year"];
+		$todaymonth = $nowinfo["mon"];
+		$todaymonthname = $nowinfo["month"];
 			
 		$elcontainer = $doc->createElement("div");
 		$elcontainer->setAttribute("class","cal-container");
@@ -153,7 +187,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 					$elrow = $doc->createElement("tr");
 					$elrow->setAttribute("class","cal-header");
 					
-						$elmonthtitle = $doc->createElement("th","January 2013"); //TODO
+						$elmonthtitle = $doc->createElement("th",$monthname." ".$year); //TODO
 						$elmonthtitle->setAttribute("class","cal-month-title");
 						$elmonthtitle->setAttribute("colspan","7");
 						$elrow->appendChild($elmonthtitle);
@@ -210,19 +244,19 @@ abstract class HtmlOutputBase extends OutputFormat {
 			
 			$elcontainer->appendChild($elcalendar);
 			
-			$elbacklink = $doc->createElement("a", "December 2012"); // TODO
+			$elbacklink = $doc->createElement("a", $lastmonthname." ".$lastyear);
 			$elbacklink->setAttribute("class","cal-nav-link cal-back-link");
-			$elbacklink->setAttribute("href","#"); // TODO
+			$elbacklink->setAttribute("href",$this->make_cal_url($lastyear,$lastmonth));
 			$elcontainer->appendChild($elbacklink);
 			
 			$eltodaylink = $doc->createElement("a", "Today");
 			$eltodaylink->setAttribute("class","cal-nav-link cal-today-link");
-			$eltodaylink->setAttribute("href","#"); // TODO
+			$eltodaylink->setAttribute("href",$this->make_cal_url($todayyear,$todaymonth));
 			$elcontainer->appendChild($eltodaylink);
 			
-			$elforwardlink = $doc->createElement("a", "February 2013"); // TODO
+			$elforwardlink = $doc->createElement("a", $nextmonthname." ".$nextyear);
 			$elforwardlink->setAttribute("class","cal-nav-link cal-forward-link");
-			$elforwardlink->setAttribute("href","#"); // TODO
+			$elforwardlink->setAttribute("href",$this->make_cal_url($nextyear,$nextmonth));
 			$elcontainer->appendChild($elforwardlink);
 	
 		return $elcontainer;
