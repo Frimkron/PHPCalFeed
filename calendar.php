@@ -5,11 +5,49 @@
 //		any kind of html 5 component for hidden panels?
 //		static implementation can't be limited in timespan
 //		can't cache current day marker
+//		static file updated once per day
 // TODO: recurring events present caching issue - when are more events added? Daily?
 // TODO: recurring events
-//		date: ( [ ([-]nth|every x[+y]) year ][ ([-]nth|every x[+y]) month ][ ([-]nth|every x[+y]) week ][ ([-]nth|every x[+y]) day ] )+
+//		date: ( [ ([-]nth|every x[+y]) year ][ ([-]nth|every x[+y]) month ][ ([-]nth|every x[+y]) week ] ([-]nth|every x[+y]) day  )+
 //		time: hour minute
 //		duration: [ x days ][ x hours ][ x minutes ]
+//		week x day y != xth yday of month
+//		every 1 months 15th day = 15th of each month
+//		every 1 months 2nd week 1st day = monday of the 2nd week of each month (ambiguous - second monday or start of week 2?)
+//		[                                ] year
+//		[     ][     ][      ] ... [     ] month
+//		 ][  ][  ][  ][  ][  ]      ][  ][ week   <-- not aligned
+//		|||||||||||||||||||||||||||||||||| day
+//		Day part is compulsory - ending with larger denomination doesnt specify single date
+//		( ( day 2 ) of week ) of month
+//		( day 256 ) of year
+//		( ( day 15 ) of month 3 ) of year
+//		( ( 2nd day ) of every 2 weeks ) of every 3 years
+//		( ( 2nd day ) every week ) every year
+//		( 2nd ( 3nd day ) every week ) every month
+//		2nd ( ( 3rd day ) of every 2 weeks ) of month
+//		S -> ( TY | NY | TM | NM | TW | NW | TD | ND )
+//		N -> [0-9]+ 
+//		T -> ( N ('th'|'rd'|'nd') ( 'to' 'last' )? | 'last' )
+//		TD -> T 'day'
+//		ND -> 'every' ( N 'days' | 'day' )
+//		TW -> T ( TD | ND ) 'of' 'week'
+//		NW -> ( TD | ND ) 'every' ( N 'weeks' | 'week' )
+//		TM -> T ( TW | NW | TD | ND  ) 'of' 'month'
+//		NM -> ( TW | NW | TD | ND  ) 'every' ( N 'months' | 'month' )
+//		TY -> T ( TM | NM | TW | NW | TD | ND ) 'of' 'year' 
+//		NY -> ( TM | NM | TW | NW | TD | ND ) 'every' ( N 'years' | 'year' )
+//		
+//		2nd (every day) of week --> 2nd day in history
+//		(2nd day) every week --> every Tuesday
+//		(every day) every 2 weeks --> daily on alternate weeks
+//		(every 2 days) every week --> every Mon, Wed, Fri, Sun
+//		every 2 days --> alternate days
+//		2nd (every 2 days) of week --> the first Wednesday in history
+//		(every 2 days) every 2 weeks --> Mon, Wed, Fri, Sun on alternate weeks
+//		2nd (2nd (2nd day) of week) of month --> Second Tuesday of the second month in history
+//		(2nd (2nd day) of week) every month --> second Tuesday every month
+//		(2nd to last (2nd day) of week) every month -> second to last Tuesday each month
 //      
 // TODO: error page should have 500 status
 // TODO: proper html output with navigation
@@ -34,6 +72,7 @@
 // TODO: icalendar feed name and link?
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
+// TODO: browser cache headers
 
 
 function input_json_if_necessary($scriptname,$updated){
