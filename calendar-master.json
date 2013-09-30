@@ -2,45 +2,58 @@
 	"name": "Mark's Event Calendar 本",
 	"description": "Events that Mark is testing with. I > U 本",
 	"url": "http://localhost/phpv5/calfeed/calendar.php 本",
+	"recurring-events": [
+		{
+			"name": "Test recurring event",
+			"recurrence": "weekly on 3rd day",
+			"time": "09:00",
+			"duration": "3d 6h",
+			"description": "An amazing event that you're all invited to"
+		}
+	],
 	"events": [
 		{
 			"name": "Tea Party: The Beveraging 本",
-			"start-time": "2014-07-20T09:00+01",
-			"end-time": "2014-07-20T17:00+01",
+			"date": "2014-07-20",
+			"time": "09:00",
+			"duration:": "3h",
 			"description": "Come and have some tea with us! We love to have a bit of earlgrey and a chin-wag, we do. That's why you should come and have a cup with us. We're your friends! Yup. 本"
 		},
 		{
 			"name": "Midnight Rave 本",
-			"start-time": "2014-05-15T00:00+01",
-			"end-time": "2014-05-16T06:00+01",
+			"date": "2014-05-15",
+			"time": "00:00",
+			"duration": "6h",
 			"url": "http://example.com 本"
 		},
 		{
 			"name": "Flying Lessons! 本",
-			"start-time": "2014-11-05T12:00+00",
-			"end-time": "2014-11-05T15:00+00",
+			"date": "2014-11-05",
+			"time": "12:00",
+			"duration": "3h 30m",
 			"description": "Come and learn how to fly for real! 本",
 			"url": "http://yahoo.com 本"
 		},
 		{
 			"name": "Recent Event",
-			"start-time": "2013-07-25T00:00+01",
-			"end-time": "2013-07-26T00:00+01"
+			"date": "2013-07-25",
+			"time": "00:00",
+			"duration": "1d"
 		},
 		{
 			"name": "Old Event",
-			"start-time": "2013-06-29T00:00+01",
-			"end-time": "2013-06-30T00:00+01"
+			"date": "2013-06-29",
+			"time": "00:05"
 		},
 		{
 			"name": "Future Event",
-			"start-time": "2015-08-01T00:00+01",
-			"end-time": "2015-08-01T00:05+01"
+			"date": "2015-08-01",
+			"time": "00:45",
+			"duration": "5m"
 		},
 		{
 			"name": "Far Future Event",
-			"start-time": "2015-10-01T00:00+01",
-			"end-time": "2015-10-01T00:05+01"
+			"date": "2015-10-01"
 		}
 	]
 }
