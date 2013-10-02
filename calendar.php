@@ -723,7 +723,7 @@ class RecurringEvent {
 	// S -> Ed | Ew | Em | Ey
 	// Ed -> 'every' N 'days' | 'daily'
 	// Ew -> ( 'every' N 'weeks' | 'weekly' ) 'on' ( Ntd | Wn )
-	// Em -> ( 'every' N 'months' | 'montly' ) 'on' ( Nt | Ntd | Nw )
+	// Em -> ( 'every' N 'months' | 'monthly' ) 'on' ( Nt | Ntd | Nw )
 	// Ey -> ( 'every' N 'years' | 'yearly' ) 'on' ( Ntd | Nw | Md | Mw )
 	// Md -> ( Nt 'of'? | Ntd 'of' ) Mn
 	// Mw -> Nw 'of' Mn
@@ -737,14 +737,27 @@ class RecurringEvent {
 	
 	public static function parse($input){
 		$pos = 0;
+		$result = RecurringEvent::parse_EdOrEwOrEmOrEy($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$type = $result["type"];
+		$freq = $result["frequency"];
+		$day = $result["day"];
+		$week = $result["week"];
+		$month = $result["month"];
+		if(RecurringEvent::expect_end($input,$pos)===FALSE) return FALSE;
+		return array( "type"=>$type, "frequency"=>$freq, "day"=>$day, "week"=>$week, "month"=>$month );
+	}
+	
+	private static function parse_EdOrEwOrEmOrEy($input,$pos){
 		$result = RecurringEvent::parse_Ed($input,$pos);
-		if( $result !== FALSE ) return array( "type"=>"daily", "frequency"=>$result["n"] );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"daily", "frequency"=>$result["n"], "day"=>0, "week"=>0, "month"=>0 );
 		$result = RecurringEvent::parse_Ew($input,$pos);
-		if( $result !== FALSE ) return array( "type"=>"weekly", "frequency"=>$result["n"], "day"=>$result["day"] );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"weekly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>0, "month"=>0 );
 		$result = RecurringEvent::parse_Em($input,$pos);
-		if( $result !== FALSE ) return array( "type"=>"monthly", "frequency"=>$result["n"] );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"monthly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>$result["week"], "month"=>0 );
 		$result = RecurringEvent::parse_Ey($input,$pos);
-		if( $result !== FALSE ) return array( "type"=>"yearly", "frequency"=>$result["n"] );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"yearly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
 		return FALSE;
 	}
 	
@@ -993,58 +1006,335 @@ class RecurringEvent {
 	}
 	
 	private static function parse_Em($input,$pos){
-		// evMonthOrMonthly
-		// on
-		// NtOrNtdOrNw
-		return FALSE;
+		$result = RecurringEvent::parse_evMonthOrMonthly($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$n = $result["n"];
+		foreach(array("o","n") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		$result = RecurringEvent::parse_NtOrNtdOrNw($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$week = $result["week"];
+		return array( "pos"=>$pos, "n"=>$n, "day"=>$day, "week"=>$week );
 	}
 	
-	private static function parse_evMonthOrMontly($input,$pos){
-		// evNMonths
-		// monthly
+	private static function parse_evMonthOrMonthly($input,$pos){
+		$result = RecurringEvent::parse_evNMonths($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
+		$result = RecurringEvent::parse_monthly($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
 		return FALSE;
 	}
 	
 	private static function parse_evNMonths($input,$pos){
-		// every
-		// N
-		// months
-		return FALSE;
+		foreach(array("e","v","e","r","y") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		$result = RecurringEvent::parse_N($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$n = $result["value"];
+		foreach(array("m","o","n","t","h","s") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos, "n"=>$n );
 	}
 	
 	private static function parse_monthly($input,$pos){
-		// monthly
-		return FALSE;
+		foreach(array("m","o","n","t","h","l","y") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
 	}
 	
 	private static function parse_NtOrNtdOrNw($input,$pos){
+		$result = RecurringEvent::parse_Nw($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>$result["week"] );
+		$result = RecurringEvent::parse_Ntd($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>0 );
+		$result = RecurringEvent::parse_Nt($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["n"], "week"=>0 );
+		return FALSE;	
+	}
 	
+	private static function parse_Nw($input,$pos){
+		$result = RecurringEvent::parse_Nl($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$week = $result["n"];
+		$result = RecurringEvent::parse_Wn($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week );
 	}
 	
 	private static function parse_Ey($input,$pos){
+		$result = RecurringEvent::parse_evYearOrYearly($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$n = $result["n"];
+		foreach(array("o","n") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		$result = RecurringEvent::parse_NtdOrNwOrMdOrMw($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$week = $result["week"];
+		$month = $result["month"];
+		return array( "n"=>$n, "pos"=>$pos, "day"=>$day, "week"=>$week, "month"=>$month );
+	}
+	
+	private static function parse_evYearOrYearly($input,$pos){
+		$result = RecurringEvent::parse_evNYears($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
+		$result = RecurringEvent::parse_yearly($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
 		return FALSE;
+	}
+	
+	private static function parse_evNYears($input,$pos){
+		foreach(array("e","v","e","r","y") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		$result = RecurringEvent::parse_N($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$n = $result["value"];
+		foreach(array("y","e","a","r","s") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
+		}
+		return array( "pos"=>$pos, "n"=>$n );
+	}
+	
+	private static function parse_yearly($input,$pos){
+		foreach(array("y","e","a","r","l","y") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_NtdOrNwOrMdOrMw($input,$pos){
+		$result = RecurringEvent::parse_Mw($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
+		$result = RecurringEvent::parse_Md($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>0, "month"=>$result["month"] );
+		$result = RecurringEvent::parse_Nw($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>$result["week"], "month"=>0 );		
+		$result = RecurringEvent::parse_Ntd($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"], "week"=>0, "month"=>0 );
+		return FALSE;
+	}
+	
+	private static function parse_Md($input,$pos){
+		$result = RecurringEvent::parse_NtOfOrNtdOf($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$result = RecurringEvent::parse_Mn($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$month = $result["month"];
+		return array( "pos"=>$pos, "day"=>$day, "month"=>$month );
+	}
+	
+	private static function parse_Mw($input,$pos){
+		$result = RecurringEvent::parse_Nw($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$week = $result["week"];
+		$day = $result["day"];
+		foreach(array("o","f") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
+		}
+		$result = RecurringEvent::parse_Mn($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$month = $result["month"];
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week, "month"=>$month );
+	}
+	
+	private static function parse_NtOfOrNtdOf($input,$pos){
+		$result = RecurringEvent::parse_NtdOf($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["day"] );
+		$result = RecurringEvent::parse_NtOf($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "day"=>$result["n"] );
+		return FALSE;
+	}
+	
+	private static function parse_NtOf($input,$pos){
+		$result = RecurringEvent::parse_Nt($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$n = $result["n"];
+		$result = RecurringEvent::parse_of($input,$pos);
+		if($result!==FALSE) $pos = $result["pos"];
+		return array( "pos"=>$pos, "n"=>$n );
+	}
+	
+	private static function parse_NtdOf($input,$pos){
+		$result = RecurringEvent::parse_Ntd($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$result = RecurringEvent::parse_of($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		return array( "pos"=>$pos, "day"=>$day );
+	}
+	
+	private static function parse_of($input,$pos){
+		foreach(array("o","f") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;			
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_Mn($input,$pos){
+		$result = RecurringEvent::parse_jan($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>1 );
+		$result = RecurringEvent::parse_feb($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>2 );
+		$result = RecurringEvent::parse_mar($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>3 );
+		$result = RecurringEvent::parse_apr($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>4 );
+		$result = RecurringEvent::parse_may($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>5 );
+		$result = RecurringEvent::parse_jun($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>6 );
+		$result = RecurringEvent::parse_jul($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>7 );
+		$result = RecurringEvent::parse_aug($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>8 );
+		$result = RecurringEvent::parse_sep($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>9 );
+		$result = RecurringEvent::parse_oct($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>10 );
+		$result = RecurringEvent::parse_nov($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>11 );
+		$result = RecurringEvent::parse_dec($input,$pos);
+		if($result!==FALSE) return array( "pos"=> $result["pos"], "month"=>12 );
+		return FALSE;
+	}
+	
+	private static function parse_jan($input,$pos){
+		foreach(array("j","a","n") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_feb($input,$pos){
+		foreach(array("f","e","b") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_mar($input,$pos){
+		foreach(array("m","a","r") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );		
+	}
+	
+	private static function parse_apr($input,$pos){
+		foreach(array("a","p","r") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}		
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_may($input,$pos){
+		foreach(array("m","a","y") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_jun($input,$pos){
+		foreach(array("j","u","n") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_jul($input,$pos){
+		foreach(array("j","u","l") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_aug($input,$pos){
+		foreach(array("a","u","g") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_sep($input,$pos){
+		foreach(array("s","e","p") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_oct($input,$pos){
+		foreach(array("o","c","t") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_nov($input,$pos){
+		foreach(array("n","o","v") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
+	}
+	
+	private static function parse_dec($input,$pos){
+		foreach(array("d","e","c") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		return array( "pos"=>$pos );
 	}
 	
 	private static function parse_N($input,$pos){
 		$buffer = "";
+		$result = RecurringEvent::parse_digit($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$buffer .= $result["value"];
+		while(TRUE){
+			$result = RecurringEvent::parse_digit($input,$pos);
+			if($result===FALSE) return array("pos"=>$pos,"value"=>(int)$buffer);
+			$pos = $result["pos"];
+			$buffer .= $result["value"];		
+		}		
+	}
+	
+	private static function parse_digit($input,$pos){
 		$result = RecurringEvent::expect($input,$pos,"0123456789");
 		if($result===FALSE) return FALSE;
-		$buffer .= $result;
-		while(TRUE){
-			$result = RecurringEvent::peek($input,$pos);
-			if($result===FALSE || strstr("0123456789",$result)===FALSE){
-				return array("pos"=>$pos, "value"=>(int)$buffer );
-			}
-			$buffer .= $result;	
-			$result = RecurringEvent::next($input,$pos);
-			if($result===FALSE) return FALSE;
-		}		
+		return array( "pos"=>$pos, "value"=>$result );
 	}
 	
 	private static function expect($input,&$pos,$chars){
 		$result = RecurringEvent::next($input,$pos);
 		if($result===FALSE || strstr($chars,$result)===FALSE) return FALSE;
 		return $result;
+	}
+	
+	private static function expect_end($input,&$pos){
+		$result = RecurringEvent::next($input,$pos);
+		return $result===FALSE;
 	}
 	
 	private static function next($input,&$pos){
@@ -1054,17 +1344,7 @@ class RecurringEvent {
 			$pos ++;
 		} while( strlen(trim($retval))==0 );
 		return $retval;
-	}
-	
-	private static function peek($input,&$pos){
-		do {
-			if($pos >= strlen($input)) return FALSE;
-			$retval = substr($input,$pos,1);
-			$iswhite = strlen(trim($retval))==0;
-			if($iswhite) $pos++;
-		} while($iswhite);
-		return $retval;
-	}
+	}	
 }
 
 function parse_duration($input){
