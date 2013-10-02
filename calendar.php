@@ -1,14 +1,12 @@
 <?php
 
+// TODO: recurring events
 // TODO: html format can't be dynamic view if cached to filesystem
 //		use javascript?
 //		any kind of html 5 component for hidden panels?
 //		static implementation can't be limited in timespan
 //		can't cache current day marker
 //		static file updated once per day
-// TODO: recurring events present caching issue - when are more events added? Daily?
-// TODO: recurring events
-//      
 // TODO: error page should have 500 status
 // TODO: proper html output with navigation
 // TODO: proper css
@@ -35,9 +33,10 @@
 // TODO: browser cache headers
 
 
-function input_json_if_necessary($scriptname,$updated){
+function input_json_if_necessary($scriptname,$cachedtime,$expiretime){
 	$filename = $scriptname."-master.json";
-	if(filemtime($filename) <= $updated){
+	$modifiedtime = filemtime($filename);
+	if($cachedtime > $modifiedtime && $cachedtime > $expiretime){
 		return FALSE;
 	}
 	$handle = @fopen($filename,"r");
@@ -129,7 +128,6 @@ function input_json_if_necessary($scriptname,$updated){
 				return "JSON: Invalid event recurrence syntax";
 			}
 			$item->recurrence = $result;
-			error_log("Recurrence: ".serialize($item->recurrence));
 		}
 	}
 	return $data;
@@ -746,7 +744,7 @@ class RecurringEvent {
 		$week = $result["week"];
 		$month = $result["month"];
 		if(RecurringEvent::expect_end($input,$pos)===FALSE) return FALSE;
-		return array( "type"=>$type, "frequency"=>$freq, "day"=>$day, "week"=>$week, "month"=>$month );
+		return new RecurringEvent($type,$freq,$day,$week,$month);
 	}
 	
 	private static function parse_EdOrEwOrEmOrEy($input,$pos){
@@ -1345,6 +1343,14 @@ class RecurringEvent {
 		} while( strlen(trim($retval))==0 );
 		return $retval;
 	}	
+	
+	private function __construct($type,$frequency,$day,$week,$month){
+		$this->type = $type;
+		$this->frequency = $frequency;
+		$this->day = $day;
+		$this->week = $week;
+		$this->month = $month;
+	}
 }
 
 function parse_duration($input){
@@ -1380,6 +1386,9 @@ function generate_events($data){
 		if(isset($item->url)) $event->url = $item->url;
 		array_push($events,$event);
 	}
+	foreach($data->{"recurring-events"} as $item){
+		// TODO
+	}
 	
 	// sort by date
 	usort($events, function($a,$b){ 
@@ -1397,15 +1406,16 @@ function generate_events($data){
 
 function update_cached_if_necessary($scriptname,$filename,$output_formats){
 	if(file_exists($filename)){
-		$updated = filemtime($filename);
-		if($updated === FALSE){
+		$cachedtime = filemtime($filename);
+		if($cachedtime === FALSE){
 			return "Failed to determine last modified time for ".$filename;
 		}
 	}else{
-		$updated = 0;
+		$cachedtime = 0;
 	}
+	$expiretime = time()-24*60*60;
 	// TODO: alternative input format if json not available
-	$data = input_json_if_necessary($scriptname,$updated);
+	$data = input_json_if_necessary($scriptname,$cachedtime,$expiretime);
 	if(is_string($data)) return $data; // error
 	if($data===FALSE) return;          // not modified
 	
