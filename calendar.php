@@ -1,6 +1,9 @@
 <?php
 
+// TODO: finish "starting" syntax in recurrence dsl
 // TODO: recurring events
+//		different logic for each type
+//		daily		
 // TODO: html format can't be dynamic view if cached to filesystem
 //		use javascript?
 //		any kind of html 5 component for hidden panels?
@@ -719,10 +722,13 @@ class XmlOutput extends OutputFormat {
 class RecurringEvent {
 
 	// S -> Ed | Ew | Em | Ey
-	// Ed -> 'every' N 'days' | 'daily'
-	// Ew -> ( 'every' N 'weeks' | 'weekly' ) 'on' ( Ntd | Wn )
-	// Em -> ( 'every' N 'months' | 'monthly' ) 'on' ( Nt | Ntd | Nw )
-	// Ey -> ( 'every' N 'years' | 'yearly' ) 'on' ( Ntd | Nw | Md | Mw )
+	// Ed -> 'every' N 'days' 'starting' D | 'daily'
+	// Ew -> 'every' N 'weeks' Ow 'starting' D | 'weekly' Ow
+	// Em -> 'every' N 'months' Om 'starting' D | 'monthly' Om 
+	// Ey -> 'every' N 'years' Oy 'starting' D | 'yearly' Oy
+	// Ow -> 'on' ( Ntd | Wn )
+	// Om -> 'on' ( Nt | Ntd | Nw )
+	// Oy -> 'on' ( Ntd | Nw | Md | Mw )
 	// Md -> ( Nt 'of'? | Ntd 'of' ) Mn
 	// Mw -> Nw 'of' Mn
 	// Ntd -> Nl 'day'
@@ -731,6 +737,7 @@ class RecurringEvent {
 	// Nt -> N ('th'|'st'|'nd'|'rd')
 	// Wn -> 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
 	// Mn -> 'jan' | 'feb' | 'mar' | 'apr' | 'may' | 'jun' | 'jul' | 'aug' | 'sep' | 'oct' | 'nov' | 'dec'
+	// D -> '[0-9]{4}-[0-9]{2}-[0-9]{2}'
 	// N -> '[0-9]+'		
 	
 	public static function parse($input){
@@ -740,30 +747,35 @@ class RecurringEvent {
 		$pos = $result["pos"];
 		$type = $result["type"];
 		$freq = $result["frequency"];
+		$start = $result["start"];
 		$day = $result["day"];
 		$week = $result["week"];
 		$month = $result["month"];
 		if(RecurringEvent::expect_end($input,$pos)===FALSE) return FALSE;
-		return new RecurringEvent($type,$freq,$day,$week,$month);
+		return new RecurringEvent($type,$freq,$start,$day,$week,$month);
 	}
 	
 	private static function parse_EdOrEwOrEmOrEy($input,$pos){
 		$result = RecurringEvent::parse_Ed($input,$pos);
-		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"daily", "frequency"=>$result["n"], "day"=>0, "week"=>0, "month"=>0 );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"daily", "frequency"=>$result["n"], 
+				"start"=>$result["start"], "day"=>0, "week"=>0, "month"=>0 );
 		$result = RecurringEvent::parse_Ew($input,$pos);
-		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"weekly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>0, "month"=>0 );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"weekly", "frequency"=>$result["n"], 
+				"start"=>$result["start"], "day"=>$result["day"], "week"=>0, "month"=>0 );
 		$result = RecurringEvent::parse_Em($input,$pos);
-		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"monthly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>$result["week"], "month"=>0 );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"monthly", "frequency"=>$result["n"], 
+				"start"=>$result["start"], "day"=>$result["day"], "week"=>$result["week"], "month"=>0 );
 		$result = RecurringEvent::parse_Ey($input,$pos);
-		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"yearly", "frequency"=>$result["n"], "day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
+		if( $result !== FALSE ) return array( "pos"=>$result["pos"], "type"=>"yearly", "frequency"=>$result["n"], 
+				"start"=>$result["start"], "day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
 		return FALSE;
 	}
 	
 	private static function parse_Ed($input,$pos){
 		$result = RecurringEvent::parse_evNDays($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"], "start"=>$result["start"] );
 		$result = RecurringEvent::parse_daily($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1, "start"=>0 );
 		return FALSE;
 	}
 	
@@ -775,10 +787,14 @@ class RecurringEvent {
 		if($result===FALSE) return FALSE;
 		$pos = $result["pos"];		
 		$n = $result["value"];
-		foreach(array("d","a","y","s") as $c){
+		foreach(array("d","a","y","s",  "s","t","a","r","t","i","n","g") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
-		return array( "pos"=>$pos, "n"=>$n );
+		$result = RecurringEvent::parse_D($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$start = $result["date"];
+		return array( "pos"=>$pos, "n"=>$n, "start"=>$start );
 	}
 	
 	private static function parse_daily($input,$pos){
@@ -789,10 +805,14 @@ class RecurringEvent {
 	}
 	
 	private static function parse_Ew($input,$pos){
-		$result = RecurringEvent::parse_evWeekOrWeekly($input,$pos);
-		if($result===FALSE) return FALSE;
-		$pos = $result["pos"];
-		$n = $result["n"];
+		$result = RecurringEvent::parse_evNWeeks($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"], "start"=>$result["start"], "day"=>$result["day"] );
+		$result = RecurringEvent::parse_weekly($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1, "start"=>0, "day"=>$result["day"] );
+		return FALSE;
+	}
+	
+	private static function parse_Ow($input,$pos){
 		foreach(array("o","n") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
@@ -800,14 +820,7 @@ class RecurringEvent {
 		if($result===FALSE) return FALSE;
 		$pos = $result["pos"];
 		$day = $result["day"];
-		return array( "pos"=>$pos, "n"=>$n, "day"=>$day );
-	}
-	
-	private static function parse_evWeekOrWeekly($input,$pos){
-		$result = RecurringEvent::parse_evNWeeks($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
-		$result = RecurringEvent::parse_weekly($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
+		return array( "pos"=>$pos, "day"=>$day );
 	}
 	
 	private static function parse_evNWeeks($input,$pos){
@@ -821,14 +834,29 @@ class RecurringEvent {
 		foreach(array("w","e","e","k","s") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
-		return array( "pos"=>$pos, "n"=>$n );
+		$result = RecurringEvent::parse_Ow($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		foreach(array("s","t","a","r","t","i","n","g") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}		
+		$result = RecurringEvent::parse_D($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$start = $result["date"];
+		return array( "pos"=>$pos, "n"=>$n, "start"=>$start, "day"=>$day );
 	}
 	
 	private static function parse_weekly($input,$pos){
 		foreach(array("w","e","e","k","l","y") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
-		return array( "pos"=>$pos );
+		$result = RecurringEvent::parse_Ow($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		return array( "pos"=>$pos, "day"=>$day );
 	}
 	
 	private static function parse_NtdOrWn($input,$pos){
@@ -1004,10 +1032,16 @@ class RecurringEvent {
 	}
 	
 	private static function parse_Em($input,$pos){
-		$result = RecurringEvent::parse_evMonthOrMonthly($input,$pos);
-		if($result===FALSE) return FALSE;
-		$pos = $result["pos"];
-		$n = $result["n"];
+		$result = RecurringEvent::parse_evNMonths($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"], "start"=>$result["start"], 
+				"day"=>$result["day"], "week"=>$result["week"] );
+		$result = RecurringEvent::parse_monthly($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1, "start"=>0,
+				"day"=>$result["day"], "week"=>$result["week"] );
+		return FALSE;
+	}
+	
+	private static function parse_Om($input,$pos){
 		foreach(array("o","n") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
@@ -1016,15 +1050,7 @@ class RecurringEvent {
 		$pos = $result["pos"];
 		$day = $result["day"];
 		$week = $result["week"];
-		return array( "pos"=>$pos, "n"=>$n, "day"=>$day, "week"=>$week );
-	}
-	
-	private static function parse_evMonthOrMonthly($input,$pos){
-		$result = RecurringEvent::parse_evNMonths($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
-		$result = RecurringEvent::parse_monthly($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
-		return FALSE;
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week );
 	}
 	
 	private static function parse_evNMonths($input,$pos){
@@ -1038,14 +1064,31 @@ class RecurringEvent {
 		foreach(array("m","o","n","t","h","s") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
-		return array( "pos"=>$pos, "n"=>$n );
+		$result = RecurringEvent::parse_Om($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$week = $result["week"];
+		foreach(array("s","t","a","r","t","i","n","g") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
+		}
+		$result = RecurringEvent::parse_D($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$start = $result["date"];
+		return array( "pos"=>$pos, "n"=>$n, "start"=>$start, "day"=>$day, "week"=>$week );
 	}
 	
 	private static function parse_monthly($input,$pos){
 		foreach(array("m","o","n","t","h","l","y") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
-		return array( "pos"=>$pos );
+		$result = RecurringEvent::parse_Om($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$week = $result["week"];
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week );
 	}
 	
 	private static function parse_NtOrNtdOrNw($input,$pos){
@@ -1071,10 +1114,16 @@ class RecurringEvent {
 	}
 	
 	private static function parse_Ey($input,$pos){
-		$result = RecurringEvent::parse_evYearOrYearly($input,$pos);
-		if($result===FALSE) return FALSE;
-		$pos = $result["pos"];
-		$n = $result["n"];
+		$result = RecurringEvent::parse_evNYears($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"], "start"=>$result["start"],
+					"day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
+		$result = RecurringEvent::parse_yearly($input,$pos);
+		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1, "start"=>0,
+					"day"=>$result["day"], "week"=>$result["week"], "month"=>$result["month"] );
+		return FALSE;
+	}
+	
+	private static function parse_Oy($input,$pos){
 		foreach(array("o","n") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;
 		}
@@ -1084,15 +1133,7 @@ class RecurringEvent {
 		$day = $result["day"];
 		$week = $result["week"];
 		$month = $result["month"];
-		return array( "n"=>$n, "pos"=>$pos, "day"=>$day, "week"=>$week, "month"=>$month );
-	}
-	
-	private static function parse_evYearOrYearly($input,$pos){
-		$result = RecurringEvent::parse_evNYears($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>$result["n"] );
-		$result = RecurringEvent::parse_yearly($input,$pos);
-		if($result!==FALSE) return array( "pos"=>$result["pos"], "n"=>1 );
-		return FALSE;
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week, "month"=>$month );
 	}
 	
 	private static function parse_evNYears($input,$pos){
@@ -1106,14 +1147,33 @@ class RecurringEvent {
 		foreach(array("y","e","a","r","s") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
 		}
-		return array( "pos"=>$pos, "n"=>$n );
+		$result = RecurringEvent::parse_Oy($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$week = $result["week"];
+		$month = $result["month"];
+		foreach(array("s","t","a","r","t","i","n","g") as $c){
+			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
+		}
+		$result = RecurringEvent::parse_D($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$start = $result["date"];
+		return array( "pos"=>$pos, "n"=>$n, "start"=>$start, "day"=>$day, "week"=>$week, "month"=>$month );
 	}
 	
 	private static function parse_yearly($input,$pos){
 		foreach(array("y","e","a","r","l","y") as $c){
 			if(RecurringEvent::expect($input,$pos,$c)===FALSE) return FALSE;		
 		}
-		return array( "pos"=>$pos );
+		$result = RecurringEvent::parse_Oy($input,$pos);
+		if($result===FALSE) return FALSE;
+		$pos = $result["pos"];
+		$day = $result["day"];
+		$month = $result["month"];
+		$year = $result["year"];
+		return array( "pos"=>$pos, "day"=>$day, "week"=>$week, "month"=>$month );
 	}
 	
 	private static function parse_NtdOrNwOrMdOrMw($input,$pos){
@@ -1318,6 +1378,28 @@ class RecurringEvent {
 		}		
 	}
 	
+	private static function parse_D($input,$pos){
+		$buffer = "";
+		for($i=0; $i<4; $i++){
+			$result = RecurringEvent::parse_digit($input,$pos);
+			if($result===FALSE) return FALSE;
+			$pos = $result["pos"];
+			$buffer .= $result["value"];
+		}
+		for($j=0; $j<2; $j++){
+			$result = RecurringEvent::expect($input,$pos,"-");
+			if($result===FALSE) return FALSE;
+			for($i=0; $i<2; $i++){
+				$result = RecurringEvent::parse_digit($input,$pos);
+				if($result===FALSE) return FALSE;
+				$pos = $result["pos"];
+				$buffer .= $result["value"];
+			}
+		}
+		$date = strtotime($buffer);
+		return array( "pos"=>$pos, "date"=>$date );
+	}
+	
 	private static function parse_digit($input,$pos){
 		$result = RecurringEvent::expect($input,$pos,"0123456789");
 		if($result===FALSE) return FALSE;
@@ -1344,9 +1426,10 @@ class RecurringEvent {
 		return $retval;
 	}	
 	
-	private function __construct($type,$frequency,$day,$week,$month){
+	private function __construct($type,$frequency,$start,$day,$week,$month){
 		$this->type = $type;
 		$this->frequency = $frequency;
+		$this->start = $start;
 		$this->day = $day;
 		$this->week = $week;
 		$this->month = $month;
@@ -1387,7 +1470,7 @@ function generate_events($data){
 		array_push($events,$event);
 	}
 	foreach($data->{"recurring-events"} as $item){
-		// TODO
+		error_log(serialize($item->recurrence));
 	}
 	
 	// sort by date
@@ -1398,7 +1481,7 @@ function generate_events($data){
 	});
 	// filter past and future events
 	$events = array_filter($events,function($item){
-		return $item->{"start-time"} >= time() - 60*24*60*60 // 60 days ago
+		return $item->{"end-time"} >= time()
 			&& $item->{"start-time"} < time() + 2*365*24*60*60; // 2 years from now
 	});
 	return $events;
