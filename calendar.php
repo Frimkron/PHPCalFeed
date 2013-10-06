@@ -1,20 +1,12 @@
 <?php
 
-// TODO: recurring events
-//		different logic for each type
-//		daily				from start increment day until end
-//		weekly				from start increment day to day of week, increment week to end
-//		monthly, day		from start jump to date of month, increment month to end
-//		monthly, xth dow	from start increment day to day of week, increment week to end
-//		yearly, day			from start jump to start of year, jump x days, repeat incrementing year to end
-//		yearly, xth dow		from start increment 
+// TODO: recurring events - x to last
 // TODO: html format can't be dynamic view if cached to filesystem
 //		use javascript?
 //		any kind of html 5 component for hidden panels?
 //		static implementation can't be limited in timespan
 //		can't cache current day marker
 //		static file updated once per day
-// TODO: error page should have 500 status
 // TODO: proper html output with navigation
 // TODO: proper css
 // TODO: input discovery
@@ -389,7 +381,9 @@ class HtmlFullOutput extends HtmlOutputBase {
 class HtmlFragOutput extends HtmlOutputBase {
 
 	public function attempt_handle_include($scriptname,$output_formats){
-		return $this->handle($scriptname,$output_formats);
+		$result = $this->handle($scriptname,$output_formats);
+		// echo rather than return, to avoid 500 response from include
+		if($result) echo $result;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats){
@@ -1515,7 +1509,14 @@ class Calendar {
 }
 
 function parse_duration($input){
-	return 0; //TODO
+	if(strlen(trim($input))==0) return FALSE;
+	$matches = array();
+	if(!preg_match("/^\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*$/",$input,$matches)) return FALSE;
+	$dur = 0;
+	if(sizeof($matches) > 1 && $matches[1]) $dur += $matches[1]*60*60*24;
+	if(sizeof($matches) > 2 && $matches[2]) $dur += $matches[2]*60*60;
+	if(sizeof($matches) > 3 && $matches[3]) $dur += $matches[3]*60;
+	return $dur;
 }
 
 function character_encoding_of_output(){
@@ -1549,13 +1550,11 @@ function generate_events($data){
 
 	$startthres = time();
 	$endthres = time() + 2*365*24*60*60;
-
 	$events = array();
-	foreach($data->events as $item){
-		array_push($events,make_event($item, strtotime($item->year."-".$item->month."-".$item->day
-				." ".$item->hour.":".$item->minute), $item->duration));
-	}
+	
+	$max_recurring = 50;
 	foreach($data->{"recurring-events"} as $item){
+		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
 		$cal = new Calendar($rec->start);
 		$cal->set_hour($item->hour);
@@ -1563,7 +1562,7 @@ function generate_events($data){
 		error_log(serialize($rec));
 		// TODO: don't increment all the way from start to current day
 		if($rec->type == "daily"){
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1575,7 +1574,7 @@ function generate_events($data){
 			while($cal->get_day_of_week() != $rec->day){
 				$cal->inc_days(1);
 			}
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1584,7 +1583,7 @@ function generate_events($data){
 		}
 		else if($rec->type == "monthly" && $rec->week == 0 && $rec->day > 0){
 			$cal->set_day($rec->day);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1602,7 +1601,7 @@ function generate_events($data){
 				$cal->inc_days(1);
 			}
 			$cal->inc_weeks($rec->week - 1);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1621,7 +1620,7 @@ function generate_events($data){
 			$cal->set_month(1);
 			$cal->set_day(1);
 			$cal->inc_days($rec->day - 1);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1641,7 +1640,7 @@ function generate_events($data){
 				$cal->inc_days(1);
 			}
 			$cal->inc_weeks($rec->week - 1);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1660,7 +1659,7 @@ function generate_events($data){
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month != 0 && $rec->day > 0){
 			$cal->set_month($rec->month);
 			$cal->set_day($rec->day);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1679,7 +1678,7 @@ function generate_events($data){
 				$cal->inc_days(1);
 			}
 			$cal->inc_weeks($rec->week - 1);
-			while($cal->time < $endthres){
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
 					array_push($events,make_event($item, $cal->time, $item->duration));
 				}
@@ -1695,6 +1694,12 @@ function generate_events($data){
 		else if($rec->type == "yearly" && $rec->week !=0 && $rec->month != 0 && $rec->week < 0){
 			// TODO last/nth to last		
 		}
+	}
+	
+	// fixed events
+	foreach($data->events as $item){
+		array_push($events,make_event($item, strtotime($item->year."-".$item->month."-".$item->day
+				." ".$item->hour.":".$item->minute), $item->duration));
 	}
 	
 	// sort by date
@@ -1793,5 +1798,6 @@ $result = attempt_handle(basename(__FILE__,".php"),$output_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
+	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
