@@ -5,7 +5,7 @@
 	"recurring-events": [
 		{
 			"name": "Test recurring event",
-			"recurrence": "yearly on 8th feb",
+			"recurrence": "weekly on 2nd to last day",
 			"time": "09:00",
 			"duration": "3d 6h",
 			"description": "An amazing event that you're all invited to"
