@@ -1484,27 +1484,33 @@ class Calendar {
 	}
 	
 	public function inc_days($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num days");
+		$inc = $num>=0 ? " + ".$num." days" : " - ".abs($num)." days";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 	
 	public function inc_weeks($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num weeks");
+		$inc = $num>=0 ? " + ".$num." weeks" : " - ".abs($num)." weeks";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 	
 	public function inc_months($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num months");
+		$inc = $num>=0 ? " + ".$num." months" : " - ".abs($num)." months";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 	
 	public function inc_years($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num years");
+		$inc = $num>=0 ? " + ".$num." years" : " - ".abs($num)." years";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 	
 	public function inc_hours($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num hours");
+		$inc = $num>=0 ? " + ".$num." hours" : " - ".abs($num)." hours";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 	
 	public function inc_minutes($num){
-		$this->time = strtotime(date("Y-m-d h:i",$this->time)." + $num minutes");
+		$inc = $num>=0 ? " + ".$num." minutes" : " - ".abs($num)." minutes";
+		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
 	}
 }
 
@@ -1561,6 +1567,7 @@ function generate_events($data){
 		$cal->set_minute($item->minute);
 		error_log(serialize($rec));
 		// TODO: don't increment all the way from start to current day
+		// daily
 		if($rec->type == "daily"){
 			while($cal->time < $endthres && sizeof($events) < $max_recurring){
 				if($cal->time >= max($startthres,$rec->start)){
@@ -1569,6 +1576,7 @@ function generate_events($data){
 				$cal->inc_days($rec->frequency);
 			}
 		}
+		// weekly, (nth last) day of week
 		else if($rec->type == "weekly"){
 			if($rec->day < 0) $rec->day = 7 + ($rec->day + 1);
 			while($cal->get_day_of_week() != $rec->day){
@@ -1581,6 +1589,7 @@ function generate_events($data){
 				$cal->inc_weeks($rec->frequency);
 			}
 		}
+		// monthly, day of month
 		else if($rec->type == "monthly" && $rec->week == 0 && $rec->day > 0){
 			$cal->set_day($rec->day);
 			while($cal->time < $endthres && sizeof($events) < $max_recurring){
@@ -1592,9 +1601,21 @@ function generate_events($data){
 				$cal->set_day($rec->day);
 			}
 		}
+		// monthly, nth last day of month
 		else if($rec->type == "monthly" && $rec->week == 0 && $rec->day < 0){
-			// TODO last/nth to last	
+			$cal->set_day(1);
+			$cal->inc_months(1);
+			$cal->inc_days($rec->day);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_day(1);
+				$cal->inc_months($rec->frequency + 1);
+				$cal->inc_days($rec->day);
+			}
 		}
+		// monthly, nth xday of month
 		else if($rec->type == "monthly" && $rec->week != 0 && $rec->week > 0){
 			$cal->set_day(1);
 			while($cal->get_day_of_week() != $rec->day){
@@ -1613,9 +1634,27 @@ function generate_events($data){
 				$cal->inc_weeks($rec->week - 1);
 			}
 		}
+		// montly, nth last xday of month
 		else if($rec->type == "monthly" && $rec->week != 0 && $rec->week < 0){
-			// TODO last/nth to last	
+			$cal->set_day(1);
+			$cal->inc_months(1);
+			do {
+				$cal->inc_days(-1);
+			}while($cal->get_day_of_week() != $rec->day);
+			$cal->inc_weeks($rec->week + 1);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_day(1);
+				$cal->inc_months($rec->frequency + 1);
+				do {
+					$cal->inc_days(-1);
+				}while($cal->get_day_of_week() != $rec->day);
+				$cal->inc_weeks($rec->week + 1);
+			}
 		}
+		// yearly, day of year
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month == 0 && $rec->day > 0){
 			$cal->set_month(1);
 			$cal->set_day(1);
@@ -1630,9 +1669,24 @@ function generate_events($data){
 				$cal->inc_days($rec->day - 1);
 			}
 		}
+		// yearly, nth last day of year
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month == 0 && $rec->day < 0){
-			// TODO last/nth to last	
+			$cal->set_day(1);
+			$cal->set_month(12);
+			$cal->set_day(31);
+			$cal->inc_days($rec->day + 1);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_day(1);
+				$cal->set_month(12);
+				$cal->set_day(31);
+				$cal->inc_years($rec->frequency);
+				$cal->inc_days($rec->day + 1);
+			}
 		}
+		// yearly, nth xday of year
 		else if($rec->type == "yearly" && $rec->week != 0 && $rec->month == 0 && $rec->week > 0){
 			$cal->set_month(1);
 			$cal->set_day(1);
@@ -1653,9 +1707,28 @@ function generate_events($data){
 				$cal->inc_weeks($rec->week - 1);
 			}
 		}
+		// yearly, nth last xday of year
 		else if($rec->type == "yearly" && $rec->week != 0 && $rec->month == 0 && $rec->week < 0){
-			// TODO last/nth to last	
+			$cal->set_month(12);
+			$cal->set_day(31);
+			while($cal->get_day_of_week() != $rec->day){
+				$cal->inc_days(-1);
+			}
+			$cal->inc_weeks($rec->week + 1);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_month(12);
+				$cal->set_day(31);
+				$cal->inc_years($rec->frequency);
+				while($cal->get_day_of_week() != $rec->day){
+					$cal->inc_days(-1);
+				}
+				$cal->inc_weeks($rec->week + 1);
+			}
 		}
+		// yearly, nth day of month
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month != 0 && $rec->day > 0){
 			$cal->set_month($rec->month);
 			$cal->set_day($rec->day);
@@ -1668,9 +1741,11 @@ function generate_events($data){
 				$cal->set_day($rec->day);
 			}
 		}
+		// yearly nth last day of month
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month != 0 && $rec->day < 0){
 			// TODO last/nth to last	
 		}
+		// yearly, nth xday of month
 		else if($rec->type == "yearly" && $rec->week != 0 && $rec->month != 0 && $rec->week > 0){
 			$cal->set_month($rec->month);
 			$cal->set_day(1);
@@ -1691,6 +1766,7 @@ function generate_events($data){
 				$cal->inc_weeks($rec->week - 1);
 			}
 		}
+		// yearly, nth last xday of month
 		else if($rec->type == "yearly" && $rec->week !=0 && $rec->month != 0 && $rec->week < 0){
 			// TODO last/nth to last		
 		}
