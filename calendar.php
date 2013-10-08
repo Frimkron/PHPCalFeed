@@ -1,6 +1,5 @@
 <?php
 
-// TODO: recurring events - x to last
 // TODO: html format can't be dynamic view if cached to filesystem
 //		use javascript?
 //		any kind of html 5 component for hidden panels?
@@ -1565,7 +1564,6 @@ function generate_events($data){
 		$cal = new Calendar($rec->start);
 		$cal->set_hour($item->hour);
 		$cal->set_minute($item->minute);
-		error_log(serialize($rec));
 		// TODO: don't increment all the way from start to current day
 		// daily
 		if($rec->type == "daily"){
@@ -1743,12 +1741,25 @@ function generate_events($data){
 		}
 		// yearly nth last day of month
 		else if($rec->type == "yearly" && $rec->week == 0 && $rec->month != 0 && $rec->day < 0){
-			// TODO last/nth to last	
+			$cal->set_day(1);
+			$cal->set_month($rec->month);
+			$cal->inc_months(1);
+			$cal->inc_days($rec->day);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_day(1);
+				$cal->set_month($rec->month);
+				$cal->inc_years($rec->frequency);
+				$cal->inc_months(1);
+				$cal->inc_days($rec->day);
+			}
 		}
 		// yearly, nth xday of month
 		else if($rec->type == "yearly" && $rec->week != 0 && $rec->month != 0 && $rec->week > 0){
-			$cal->set_month($rec->month);
 			$cal->set_day(1);
+			$cal->set_month($rec->month);
 			while($cal->get_day_of_week() != $rec->day){
 				$cal->inc_days(1);
 			}
@@ -1768,7 +1779,26 @@ function generate_events($data){
 		}
 		// yearly, nth last xday of month
 		else if($rec->type == "yearly" && $rec->week !=0 && $rec->month != 0 && $rec->week < 0){
-			// TODO last/nth to last		
+			$cal->set_day(1);
+			$cal->set_month($rec->month);
+			$cal->inc_months(1);
+			do {
+				$cal->inc_days(-1);
+			}while($cal->get_day_of_week() != $rec->day);
+			$cal->inc_weeks($rec->week + 1);
+			while($cal->time < $endthres && sizeof($events) < $max_recurring){
+				if($cal->time >= max($startthres,$rec->start)){
+					array_push($events,make_event($item, $cal->time, $item->duration));
+				}
+				$cal->set_day(1);
+				$cal->set_month($rec->month);
+				$cal->inc_years($rec->frequency);
+				$cal->inc_months(1);
+				do{
+					$cal->inc_days(-1);
+				}while($cal->get_day_of_week() != $rec->day);
+				$cal->inc_weeks($rec->week + 1);
+			}
 		}
 	}
 	
