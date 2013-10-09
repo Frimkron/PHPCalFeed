@@ -158,23 +158,25 @@ abstract class OutputFormat {
 
 abstract class HtmlOutputBase extends OutputFormat {
 
-	private function int_param($name,$min,$max,$default){
-		if(!isset($_GET[$name])) return $default;
-		if(!is_int($_GET[$name])) return $default;
-		if($_GET[$name] < $min) return $default;
-		if($_GET[$name] > $max) return $default;
-		return $_GET[$name];
+	const MAX_PLUS_MONTHS = 23;
+
+	protected function get_plusmonths(){
+		if(!isset($_GET["calmn"])) return 0;
+		if(!is_numeric($_GET["calmn"])) return 0;
+		if((int)$_GET["calmn"] != $_GET["calmn"]) return 0;
+		if($_GET["calmn"] < 0) return 0;
+		if($_GET["calmn"] > self::MAX_PLUS_MONTHS) return 0;
+		return $_GET["calmn"];
 	}
-	
-	private function make_cal_url($year,$month){
+
+	private function make_cal_url($plusmonths){
 		$url = parse_url($_SERVER["REQUEST_URI"]);
 		$params = array();
 		foreach(explode("&",$url["query"]) as $nameval){
 			$bits = explode("=",$nameval);
 			$params[$bits[0]] = $bits[1];		
 		}
-		$params["calyr"] = $year;
-		$params["calmn"] = $month;
+		$params["calmn"] = $plusmonths;
 		$toimplode = array();
 		foreach($params as $name=>$val){
 			array_push($toimplode,$name."=".$val);
@@ -182,27 +184,44 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return $url["path"]."?".implode("&",$toimplode);
 	}
 
-	protected function make_html_fragment($doc,$data){
+	protected function make_html_fragment($doc,$data,$time,$plusmonths){
 	
-		$nowinfo = getdate();
-		$year = $this->int_param("calyr",0,9999,$nowinfo["year"]);
-		$month = $this->int_param("calmn",1,12,$nowinfo["mon"]);		
-		$monthname = getdate(strtotime($year."-".$month."-1"))["month"];
+		$cal = new Calendar($time);		
+		$todayday = $cal->get_day();
+		$todaymonth = $cal->get_month();
+		$todayyear = $cal->get_year();
 		
-		$lastinfo = getdate(strtotime($year."-".$month."-1 - 1 month"));
-		$lastyear = $lastinfo["year"];
-		$lastmonth = $lastinfo["mon"];
-		$lastmonthname = $lastinfo["month"];
-		
-		$nextinfo = getdate(strtotime($year."-".$month."-1 + 1 month"));
-		$nextyear = $nextinfo["year"];
-		$nextmonth = $nextinfo["mon"];
-		$nextmonthname = $nextinfo["month"];
-		
-		$todayyear = $nowinfo["year"];
-		$todaymonth = $nowinfo["mon"];
-		$todaymonthname = $nowinfo["month"];
-			
+		$cal->set_day(1);
+		$cal->inc_months($plusmonths-1);
+		$prevname = $cal->get_month_name()." ".$cal->get_year();
+		$cal->inc_months(1);
+		$currname = $cal->get_month_name()." ".$cal->get_year();
+		$currmonth = $cal->get_month();
+		$curryear = $cal->get_year();
+		$cal->inc_months(1);
+		$nextname = $cal->get_month_name()." ".$cal->get_year();
+		$cal->inc_months(-1);
+	
+		while($cal->get_day_of_week() != 1){
+			$cal->inc_days(-1);
+		}
+		$weeks = array();
+		while($cal->get_year() < $curryear 
+				|| ($cal->get_year() == $curryear && $cal->get_month() <= $currmonth)){
+			$week = array();
+			for($i=0; $i<7; $i++){
+				$day = array();
+				$day["date"] = $cal->get_day();
+				$day["outside"] = $cal->get_month() != $currmonth;
+				$day["today"] = $cal->get_year()==$todayyear 
+							&& $cal->get_month()==$todaymonth && $cal->get_day()==$todayday;
+				$day["events"] = array();
+				array_push($week,$day);
+				$cal->inc_days(1);
+			}
+			array_push($weeks,$week);
+		}
+	
 		$elcontainer = $doc->createElement("div");
 		$elcontainer->setAttribute("class","cal-container");
 	
@@ -234,7 +253,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 					$elrow = $doc->createElement("tr");
 					$elrow->setAttribute("class","cal-header");
 					
-						$elmonthtitle = $doc->createElement("th",$monthname." ".$year); //TODO
+						$elmonthtitle = $doc->createElement("th",$currname);
 						$elmonthtitle->setAttribute("class","cal-month-title");
 						$elmonthtitle->setAttribute("colspan","7");
 						$elrow->appendChild($elmonthtitle);
@@ -257,15 +276,6 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$eltbody = $doc->createElement("tbody");
 				$eltbody->setAttribute("class","cal-weeks");
 				
-					// TODO
-					$weeks = array(
-						array( array("date"=>30), array("date"=>31), array("date"=>1), array("date"=>2), array("date"=>3), array("date"=>4), array("date"=>5) ),
-						array( array("date"=>6), array("date"=>7), array("date"=>8), array("date"=>9), array("date"=>10), array("date"=>11), array("date"=>12) ),
-						array( array("date"=>13), array("date"=>14), array("date"=>15), array("date"=>16), array("date"=>17), array("date"=>18), array("date"=>19) ),
-						array( array("date"=>20), array("date"=>21), array("date"=>22), array("date"=>23), array("date"=>24), array("date"=>25), array("date"=>26) ),
-						array( array("date"=>27), array("date"=>28), array("date"=>29), array("date"=>30), array("date"=>31), array("date"=>1), array("date"=>2) ),
-					);
-				
 					foreach($weeks as $week){
 						
 						$elweek = $doc->createElement("tr");
@@ -274,7 +284,10 @@ abstract class HtmlOutputBase extends OutputFormat {
 							foreach($week as $day){
 							
 								$elday = $doc->createElement("td");
-								$elday->setAttribute("class","cal-day");
+								$cellclass = "cal-day";
+								if($day["outside"]) $cellclass .= " cal-outside-day";
+								if($day["today"]) $cellclass .= " cal-today";
+								$elday->setAttribute("class",$cellclass);
 								
 									$eldate = $doc->createElement("div",$day["date"]);
 									$eldate->setAttribute("class","cal-date");									
@@ -283,28 +296,31 @@ abstract class HtmlOutputBase extends OutputFormat {
 								$elweek->appendChild($elday);
 							}
 						
-						$eltbody->appendChild($elweek);
-						
+						$eltbody->appendChild($elweek);						
 					}
 				
 				$elcalendar->appendChild($eltbody);
 			
 			$elcontainer->appendChild($elcalendar);
 			
-			$elbacklink = $doc->createElement("a", $lastmonthname." ".$lastyear);
-			$elbacklink->setAttribute("class","cal-nav-link cal-back-link");
-			$elbacklink->setAttribute("href",$this->make_cal_url($lastyear,$lastmonth));
-			$elcontainer->appendChild($elbacklink);
+			if($plusmonths > 0){
+				$elbacklink = $doc->createElement("a", $prevname);
+				$elbacklink->setAttribute("class","cal-nav-link cal-back-link");
+				$elbacklink->setAttribute("href",$this->make_cal_url($plusmonths - 1));
+				$elcontainer->appendChild($elbacklink);
+			}
 			
 			$eltodaylink = $doc->createElement("a", "Today");
 			$eltodaylink->setAttribute("class","cal-nav-link cal-today-link");
-			$eltodaylink->setAttribute("href",$this->make_cal_url($todayyear,$todaymonth));
+			$eltodaylink->setAttribute("href",$this->make_cal_url(0));
 			$elcontainer->appendChild($eltodaylink);
 			
-			$elforwardlink = $doc->createElement("a", $nextmonthname." ".$nextyear);
-			$elforwardlink->setAttribute("class","cal-nav-link cal-forward-link");
-			$elforwardlink->setAttribute("href",$this->make_cal_url($nextyear,$nextmonth));
-			$elcontainer->appendChild($elforwardlink);
+			if($plusmonths < self::MAX_PLUS_MONTHS){
+				$elforwardlink = $doc->createElement("a", $nextname);
+				$elforwardlink->setAttribute("class","cal-nav-link cal-forward-link");
+				$elforwardlink->setAttribute("href",$this->make_cal_url($plusmonths + 1));
+				$elcontainer->appendChild($elforwardlink);
+			}
 	
 		return $elcontainer;
 	}
@@ -326,51 +342,57 @@ class HtmlFullOutput extends HtmlOutputBase {
 		return $this->handle($scriptname,$output_formats);
 	}
 
-	protected function get_filename($name){
-		return $name.".html";
+	protected function get_filename($name,$plusmonths=0){
+		return "$name$plusmonths.html";
 	}
 
 	public function write_file_if_possible($scriptname,$data){
 	
-		$dom = new DOMImplementation();
+		$time = time();
 	
-		$doctype = $dom->createDocumentType("html","","");
+		for($plusmonths=0; $plusmonths<=self::MAX_PLUS_MONTHS; $plusmonths++){
 	
-		$doc = $dom->createDocument(NULL,NULL,$doctype);
-	
-		$elhtml = $doc->createElement("html");
-			$elhead = $doc->createElement("head");
-	
-				$eltitle = $doc->createElement("title",
-					isset($data->name) ? $data->name : "Calendar");
-				$elhead->appendChild($eltitle);
-	
-				$elcss = $doc->createElement("link");
-				$elcss->setAttribute("rel","stylesheet");
-				$elcss->setAttribute("type","text/css");
-				$elcss->setAttribute("href",$scriptname.".css");
-				$elhead->appendChild($elcss);
-	
-			$elhtml->appendChild($elhead);
-	
-			$elbody = $doc->createElement("body");
-	
-				$elfrag = $this->make_html_fragment($doc,$data);
-				$elbody->appendChild($elfrag);
-	
-			$elhtml->appendChild($elbody);
-		$doc->appendChild($elhtml);
-	
-		$filename = $this->get_filename($scriptname);
-		$doc->formatOutput = TRUE;
-		if( @$doc->saveHTMLFile($filename) === FALSE){
-			return "Failed to write ".$filename;
+			$dom = new DOMImplementation();
+		
+			$doctype = $dom->createDocumentType("html","","");
+		
+			$doc = $dom->createDocument(NULL,NULL,$doctype);
+		
+			$elhtml = $doc->createElement("html");
+				$elhead = $doc->createElement("head");
+		
+					$eltitle = $doc->createElement("title",
+						isset($data->name) ? $data->name : "Calendar");
+					$elhead->appendChild($eltitle);
+		
+					$elcss = $doc->createElement("link");
+					$elcss->setAttribute("rel","stylesheet");
+					$elcss->setAttribute("type","text/css");
+					$elcss->setAttribute("href",$scriptname.".css");
+					$elhead->appendChild($elcss);
+		
+				$elhtml->appendChild($elhead);
+		
+				$elbody = $doc->createElement("body");
+		
+					$elfrag = $this->make_html_fragment($doc,$data,$time,$plusmonths);
+					$elbody->appendChild($elfrag);
+		
+				$elhtml->appendChild($elbody);
+			$doc->appendChild($elhtml);
+		
+			$filename = $this->get_filename($scriptname,$plusmonths);
+			$doc->formatOutput = TRUE;
+			if( @$doc->saveHTMLFile($filename) === FALSE){
+				return "Failed to write ".$filename;
+			}
 		}
 	}
 		
 	public function output($scriptname){
+		$plusmonths = $this->get_plusmonths();
 		header("Content-Type: text/html; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
+		$filename = $this->get_filename($scriptname,$plusmonths);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -394,20 +416,26 @@ class HtmlFragOutput extends HtmlOutputBase {
 		return FALSE;
 	}
 
-	protected function get_filename($scriptname){
-		return $scriptname."-frag.html";	
+	protected function get_filename($scriptname,$plusmonths=0){
+		return "$scriptname$plusmonths-frag.html";	
 	}
 	
 	public function write_file_if_possible($scriptname,$data){
 	
-		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_html_fragment($doc,$data) );
-		$doc->formatOutput = TRUE;
- 		$doc->saveHTMLFile($this->get_filename($scriptname));
+		$time = time();
+	
+		for($plusmonths=0; $plusmonths<=self::MAX_PLUS_MONTHS; $plusmonths++){
+	
+			$doc = new DOMDocument();
+			$doc->appendChild( $this->make_html_fragment($doc,$data,$time,$plusmonths) );
+			$doc->formatOutput = TRUE;
+ 			$doc->saveHTMLFile($this->get_filename($scriptname,$plusmonths)); 			
+ 		}
 	}
 	
 	public function output($scriptname){
-		$filename = $this->get_filename($scriptname);
+		$plusmonths = $this->get_plusmonths();
+		$filename = $this->get_filename($scriptname,$plusmonths);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
@@ -1434,10 +1462,14 @@ class RecurrenceParser {
 
 class Calendar {
 	
-	public function __construct($time){
-		$this->time = $time;
+	public function __construct($timeoryear,$month=-1,$day=-1){
+		if($month==-1 && $day==-1){
+			$this->time = $timeoryear;
+		}else{
+			$this->time = strtotime("$timeoryear-$month-$day");
+		}
 	}
-
+	
 	public function get_day_of_week(){
 		return date("N",$this->time);
 	}
@@ -1458,7 +1490,7 @@ class Calendar {
 		$this->time = strtotime(date("Y-$num-d h:i",$this->time));
 	}
 	
-	public function get_day($num){
+	public function get_day(){
 		return date("d",$this->time);
 	}
 	
@@ -1510,6 +1542,10 @@ class Calendar {
 	public function inc_minutes($num){
 		$inc = $num>=0 ? " + ".$num." minutes" : " - ".abs($num)." minutes";
 		$this->time = strtotime(date("Y-m-d h:i",$this->time).$inc);
+	}
+	
+	public function get_month_name(){
+		return date("F",$this->time);
 	}
 }
 
