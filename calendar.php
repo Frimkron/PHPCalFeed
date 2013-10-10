@@ -158,33 +158,7 @@ abstract class OutputFormat {
 
 abstract class HtmlOutputBase extends OutputFormat {
 
-	const MAX_PLUS_MONTHS = 23;
-
-	protected function get_plusmonths(){
-		if(!isset($_GET["calmn"])) return 0;
-		if(!is_numeric($_GET["calmn"])) return 0;
-		if((int)$_GET["calmn"] != $_GET["calmn"]) return 0;
-		if($_GET["calmn"] < 0) return 0;
-		if($_GET["calmn"] > self::MAX_PLUS_MONTHS) return 0;
-		return $_GET["calmn"];
-	}
-
-	private function make_cal_url($plusmonths){
-		$url = parse_url($_SERVER["REQUEST_URI"]);
-		$params = array();
-		foreach(explode("&",$url["query"]) as $nameval){
-			$bits = explode("=",$nameval);
-			$params[$bits[0]] = $bits[1];		
-		}
-		$params["calmn"] = $plusmonths;
-		$toimplode = array();
-		foreach($params as $name=>$val){
-			array_push($toimplode,$name."=".$val);
-		}
-		return $url["path"]."?".implode("&",$toimplode);
-	}
-
-	protected function make_html_fragment($doc,$data,$time,$plusmonths){
+	protected function make_html_fragment($doc,$data){
 	
 		$cal = new Calendar($time);		
 		$todayday = $cal->get_day();
