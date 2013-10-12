@@ -1,24 +1,24 @@
-.cal-container { width: 80%; margin: 0 auto; padding: 1em; text-align: center; font-size: 10pt; 
-					color: rgb(64,64,64); font-family: verdana, tahoma, arial, sans-serif; position: relative; }
+.cal-container { width: 95%; margin: 0 auto; padding: 1em 0em; text-align: center; font-size: 10pt; 
+					color: rgb(64,64,64); font-family: verdana, tahoma, arial, sans-serif; position: relative; 
+					min-width: 48em; }
 .cal-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 0.25em; }
 .cal-title a, .cal-title a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-title a:hover { text-decoration: underline; }
 .cal-calendar { border-top: 2px solid rgb(200,200,200); border-left: 2px solid rgb(200,200,200); border-right: 2px solid rgb(150,150,150);
-				border-bottom: 2px solid rgb(150,150,150); margin: 1em 0; width: 100%; background-color: white; 
+				border-bottom: 2px solid rgb(150,150,150); margin: 1em 0; width: auto; background-color: white; 
 				border-radius: 0px 0px 20px 20px; padding: 0.1em 0.25em 1.0em 0.25em; box-shadow: 2px 5px 5px rgb(200,200,200); 
-				position: absolute; top: 80px; z-index: 0; visibility: hidden; }
+				position: absolute; top: 80px; z-index: 0; }
 /*.cal-calendar thead { background-color: green; display: block; position: absolute; }*/
 .cal-day { border-top: 1px solid rgb(150,150,150); border-left: 1px solid rgb(150,150,150); border-right: 1px solid rgb(200,200,200); 
 				border-bottom: 1px solid rgb(200,200,200); height: 6em; vertical-align: top; text-align: left; 
 				box-shadow: inset 1px 3px 3px rgb(220,220,220); }
 .cal-outside-day { background-color: rgb(220,220,220); }
 .cal-today { border: 3px solid rgb(0,200,200); }
-.cal-day-title { width: 14%; }
 .cal-date { text-align: left; }
 .cal-calendar caption { background-color: white; border-left: 2px solid rgb(200,200,200); border-top: 2px solid rgb(200,200,200); 
 				border-right: 2px solid rgb(150,150,150); border-bottom: none; font-size: 12pt; font-weight: bold; padding: 0; 
 				margin: 0px auto 0px 0px; width: 33%; border-radius: 20px 20px 0px 0px; text-align: center; margin-bottom: -2px; 
-				z-index: 1; position: relative; height: 2em; color: white; visibility: visible; }
+				z-index: 1; position: relative; height: 2em; color: white; }
 .cal-calendar tbody { z-index: -1; position: relative; background-color: white; }
 /*.cal-calendar caption { text-weight: bold; font-size: 12pt; background-color: rgb(0,200,200); padding: 0.25em; border-radius: 20px; 
 				text-shadow: 0px 1px 1px rgb(255,255,255); background: -moz-linear-gradient(top,rgb(0,250,250),rgb(0,200,200)); 
@@ -27,13 +27,14 @@
 #calendar0 caption { margin-left: 0px; margin-right: auto; }
 #calendar1 caption { margin-left: auto; margin-right: auto; }
 #calendar2 caption { margin-left: auto; margin-right: 0px; }
-#calendar0 { z-index: 0; visibility: visible; }
+#calendar0 { z-index: 0; }
 #calendar1 { z-index: -1; }
 #calendar2 { z-index: -2; }
 #calendar1:target { visibility: visible; z-index: 0; }
 #calendar2:target { visibility: visible; z-index: 0; }
 .cal-month-title { display: block; position: relative; width: 200px; top: -32px; left: 0px; }
-.cal-day-title { text-weight: bold; font-size: 10pt; padding: 0.25em; }
+.cal-day-title { width: 14%; text-weight: bold; font-size: 8pt; padding: 0.25em; }
+.cal-events { overflow: auto; max-height: 5em; }
 .cal-event { font-size: 8pt; margin: 0.5em; }
 .cal-event a, .cal-event a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-event a:hover { color: rgb(0,200,200); }
