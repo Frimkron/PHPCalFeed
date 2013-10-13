@@ -1,6 +1,6 @@
 .cal-container { width: 80%; margin: 0 auto; padding: 1em; text-align: center; font-size: 10pt; 
 					color: rgb(64,64,64); font-family: verdana, tahoma, arial, sans-serif; position: relative; }
-.cal-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 0.25em; }
+.cal-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 0.25em; min-width: 750px; }
 .cal-title a, .cal-title a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-title a:hover { text-decoration: underline; }
 .cal-calendar { border-top: 2px solid rgb(200,200,200); border-left: 2px solid rgb(200,200,200); border-right: 2px solid rgb(150,150,150);
@@ -9,7 +9,7 @@
 				position: absolute; top: 80px; z-index: 0; visibility: hidden; }
 /*.cal-calendar thead { background-color: green; display: block; position: absolute; }*/
 .cal-day { border-top: 1px solid rgb(150,150,150); border-left: 1px solid rgb(150,150,150); border-right: 1px solid rgb(200,200,200); 
-				border-bottom: 1px solid rgb(200,200,200); height: 6em; vertical-align: top; text-align: left; 
+				border-bottom: 1px solid rgb(200,200,200); vertical-align: top; text-align: left; 
 				box-shadow: inset 1px 3px 3px rgb(220,220,220); }
 .cal-outside-day { background-color: rgb(220,220,220); }
 .cal-today { border: 3px solid rgb(0,200,200); }
@@ -37,6 +37,7 @@
 .cal-event { font-size: 8pt; margin: 0.5em; }
 .cal-event a, .cal-event a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-event a:hover { color: rgb(0,200,200); }
+.cal-events { height: 5em; overflow: auto; }
 /*.cal-nav-link, .cal-nav-link:visited { display: block; text-decoration: none; padding: 4px 0.25em 0 0.25em; 
 				border: 1px outset rgb(150,150,150); width: 10em; height: 24px; margin: 8px auto; color: rgb(64,64,64); background-color: white; 
 				box-shadow: 1px 2px 2px rgb(200,200,200); background: -moz-linear-gradient(top,white,rgb(200,200,200));
@@ -49,8 +50,8 @@
 .cal-forward-link { margin-right: 1em; }
 .cal-today-link { margin-bottom: -38px; text-align: center; }*/
 .cal-nav-link { display: block; font-size: 12pt; font-weight: bold; text-decoration: none; color: rgb(64,64,64); 
-				width: 33%; padding: 0.25em; position: absolute; top: 80px;  z-index: 2; margin-top: 1em; 
-				/*border: 1px solid lime;*/ }
+				width: 33%; padding: 0.25em 0em; position: absolute; top: 80px;  z-index: 2; margin-top: 1em; min-width: 200px; 
+				border: 1px solid lime; }
 .col-nav-link:hover { color: rgb(0,200,200); }
 #cal-0-link { left: 0%; } 
 #cal-1-link { left: 33%; }
