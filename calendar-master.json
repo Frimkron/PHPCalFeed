@@ -5,13 +5,20 @@
 	"recurring-events": [
 		{
 			"name": "Test recurring event",
-			"recurrence": "yearly on 2nd to last wed of mar",
+			"recurrence": "monthly on 2nd to last wed",
 			"time": "09:00",
 			"duration": "3h",
 			"description": "An amazing event that you're all invited to"
 		}
 	],
 	"events": [
+		{
+			"name": "Jazz Festival",
+			"date": "2013-10-18",
+			"time": "21:00",
+			"duration": "2d",
+			"url": "http://google.com"
+		},
 		{
 			"name": "Tea Party: The Beveraging 本",
 			"date": "2014-07-20",

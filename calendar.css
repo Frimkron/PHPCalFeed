@@ -7,7 +7,7 @@
 .cal-description { margin: 0.5em 0; }
 .cal-calendar { border-top: 2px solid rgb(200,200,200); border-left: 2px solid rgb(200,200,200); border-right: 2px solid rgb(150,150,150);
 				border-bottom: 2px solid rgb(150,150,150); margin: 0; width: 100%; background-color: white; 
-				border-radius: 0px 0px 20px 20px; padding: 0.1em 0.25em 1.0em 0.25em; box-shadow: 2px 5px 5px rgb(200,200,200); 
+				border-radius: 0px 0px 20px 20px; padding: 0.1em 0.25em 1.0em 0.25em; box-shadow: 2px 5px 5px rgba(0,0,0,0.5); 
 				float: left; margin-right: -100%; position: relative; height: 40em; }
 .cal-day { border-top: 1px solid rgb(150,150,150); border-left: 1px solid rgb(150,150,150); border-right: 1px solid rgb(200,200,200); 
 				border-bottom: 1px solid rgb(200,200,200); vertical-align: top; text-align: left; 
@@ -24,12 +24,12 @@
 .cal-calendar:not(:target) { visibility: hidden; }
 .cal-calendar:target caption { z-index: 1; }
 .cal-calendar:not(:target) caption { z-index: -1; }
-#calendar0 caption { margin-left: 0px; margin-right: auto; z-index: 1; }
-#calendar1 caption { margin-left: auto; margin-right: auto; }
-#calendar2 caption { margin-left: auto; margin-right: 0px; }
-#calendar0 { clear: both; visibility: visible; z-index: 0; }
-#calendar1 {}
-#calendar2 { float: none; }
+#cal-calendar-0 caption { margin-left: 0px; margin-right: auto; z-index: 1; }
+#cal-calendar-1 caption { margin-left: auto; margin-right: auto; }
+#cal-calendar-2 caption { margin-left: auto; margin-right: 0px; }
+#cal-calendar-0 { clear: both; visibility: visible; z-index: 0; }
+#cal-calendar-1 {}
+#cal-calendar-2 { float: none; }
 .cal-month-title { display: block; position: relative; width: 200px; top: -32px; left: 0px; }
 .cal-day-title { width: 14%; text-weight: bold; font-size: 8pt; padding: 0.25em; vertical-align: bottom; height: 1.5em; }
 .cal-events { overflow: auto; max-height: 5em; }
@@ -37,6 +37,6 @@
 .cal-event a, .cal-event a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-event a:hover { color: rgb(0,200,200); }
 .cal-nav-link { display: block; font-size: 11pt; font-weight: bold; text-decoration: none; color: rgb(64,64,64); 
-				width: 33%; padding: 0.25em 0em; z-index: 8; margin-top: 1em; 
-				float: left; height: 1.5em; margin-bottom: -2.25em; position: relative; }
+				width: 33%; padding: 0.25em 0em; z-index: 8; margin-top: 1em; float: left; height: 1.5em; 
+				margin-bottom: -2.25em; position: relative; }
 .col-nav-link:hover { color: rgb(0,200,200); }
