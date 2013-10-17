@@ -6,6 +6,7 @@
 		<link rel="stylesheet" type="text/css" href="calendar.css">
 	</head>
 	<body style="background-color: rgb(150,150,100); width: 75%; margin: 0px auto;">
+		Content before calendar
 		<div class="cal-container">
 			<h2 class="cal-title">
 				<a href="http://localhost/phpv5/calfeed/calendar.php%20%E6%9C%AC">Mark's Event Calendar &#26412;</a>
@@ -114,8 +115,10 @@
 						</td>
 						<td class="cal-day">
 							<div class="cal-date">21</div>
-							<div class="cal-event">
-								<a href="#">22:00-23:00 Chocolate cake eating</a>
+							<div class="cal-events">
+								<div class="cal-event">
+									<a href="#">22:00-23:00 Chocolate cake eating</a>
+								</div>
 							</div>
 						</td>
 						<td class="cal-day">
@@ -136,25 +139,30 @@
 					</tr>
 					<tr class="cal-week">
 						<td class="cal-day">
-							<div class="cal-date">27</div>
+							<div class="cal-date">20</div>
 						</td>
 						<td class="cal-day">
-							<div class="cal-date">28</div>
+							<div class="cal-date">21</div>
+							<div class="cal-events">
+								<div class="cal-event">
+									<a href="#">22:00-23:00 Chocolate cake eating</a>
+								</div>
+							</div>
 						</td>
 						<td class="cal-day">
-							<div class="cal-date">29</div>
+							<div class="cal-date">22</div>
 						</td>
 						<td class="cal-day">
-							<div class="cal-date">30</div>
+							<div class="cal-date">23</div>
 						</td>
 						<td class="cal-day">
-							<div class="cal-date">31</div>
+							<div class="cal-date">24</div>
 						</td>
-						<td class="cal-day cal-outside-day">
-							<div class="cal-date">1</div>
+						<td class="cal-day">
+							<div class="cal-date">25</div>
 						</td>
-						<td class="cal-day cal-outside-day">
-							<div class="cal-date">2</div>
+						<td class="cal-day">
+							<div class="cal-date">26</div>
 						</td>
 					</tr>
 				</tbody>
@@ -172,7 +180,7 @@
 						<th class="cal-day-title">Sunday</th>
 					</tr>
 				</thead>
-				<tbody class="cal-weeks">
+				<tbody>
 					<tr class="cal-week">
 						<td class="cal-day cal-outside-day">
 							<div class="cal-date">30</div>
@@ -248,8 +256,10 @@
 						</td>
 						<td class="cal-day">
 							<div class="cal-date">21</div>
-							<div class="cal-event">
-								<a href="#">22:00-23:00 Chocolate cake eating</a>
+							<div class="cal-events">
+								<div class="cal-event">
+									<a href="#">22:00-23:00 Chocolate cake eating</a>
+								</div>
 							</div>
 						</td>
 						<td class="cal-day">
@@ -268,29 +278,6 @@
 							<div class="cal-date">26</div>
 						</td>
 					</tr>
-					<tr class="cal-week">
-						<td class="cal-day">
-							<div class="cal-date">27</div>
-						</td>
-						<td class="cal-day">
-							<div class="cal-date">28</div>
-						</td>
-						<td class="cal-day">
-							<div class="cal-date">29</div>
-						</td>
-						<td class="cal-day">
-							<div class="cal-date">30</div>
-						</td>
-						<td class="cal-day">
-							<div class="cal-date">31</div>
-						</td>
-						<td class="cal-day cal-outside-day">
-							<div class="cal-date">1</div>
-						</td>
-						<td class="cal-day cal-outside-day">
-							<div class="cal-date">2</div>
-						</td>
-					</tr>
 				</tbody>
 			</table>
 			<table id="calendar2" class="cal-calendar">
@@ -306,7 +293,7 @@
 						<th class="cal-day-title">Sunday</th>
 					</tr>
 				</thead>
-				<tbody class="cal-weeks">
+				<tbody>
 					<tr class="cal-week">
 						<td class="cal-day cal-outside-day">
 							<div class="cal-date">30</div>
@@ -417,6 +404,11 @@
 						</td>
 						<td class="cal-day cal-outside-day">
 							<div class="cal-date">1</div>
+							<div class="cal-events">
+								<div class="cal-event">
+									<a href="#">foo</a>
+								</div>
+							</div>
 						</td>
 						<td class="cal-day cal-outside-day">
 							<div class="cal-date">2</div>
@@ -425,5 +417,6 @@
 				</tbody>
 			</table>
 		</div>
+		Content after calendar
 	</body>
 </html>
