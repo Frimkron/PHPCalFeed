@@ -203,6 +203,8 @@ abstract class HtmlOutputBase extends OutputFormat {
 				
 				$cal->inc_months(1);
 			}
+
+			$currentevents = array();
 	
 			for($plusmonths=0; $plusmonths<self::SHOW_MONTHS; $plusmonths++){
 	
@@ -241,17 +243,23 @@ abstract class HtmlOutputBase extends OutputFormat {
 						while($nextevent < sizeof($data->events)
 								&& $data->events[$nextevent]->{"start-time"} < $starttime){
 							$nextevent++;		
-						}						
-						while($nextevent < sizeof($data->events) 
+						}			
+						while( $nextevent < sizeof($data->events)
 								&& $data->events[$nextevent]->{"start-time"} >= $starttime
-								&& $data->events[$nextevent]->{"start-time"} < $endtime){
-							$event = $data->events[$nextevent];
+								&& $data->events[$nextevent]->{"start-time"} < $endtime ){
+							array_push($currentevents,$data->events[$nextevent]);
+							$nextevent++;
+						}
+						# TODO: copy currevents array so items can be removed during iteration	
+						foreach($currentevents as $event){
+							if($currentevent->{"start-time"} > $endtime || $currentevent->{"end-time"} <= $starttime) {
+								
+							}
 							$eventdata = array();
 							$eventdata["label"] = date("H:i",$event->{"start-time"})
 								."-".date("H:i",$event->{"end-time"})." ".$event->name;
 							if(isset($event->url)) $eventdata["url"] = $event->url;
 							array_push($daydata["events"],$eventdata);
-							$nextevent++;
 						}
 						array_push($week,$daydata);
 						$cal->inc_days(1);
