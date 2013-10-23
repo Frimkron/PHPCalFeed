@@ -1,7 +1,5 @@
 <?php
 
-// TODO: date spanning for events in html
-// TODO: proper html output with navigation
 // TODO: input discovery
 // TODO: input preference storage in config php
 // TODO: yaml input
@@ -22,9 +20,9 @@
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
 // TODO: browser cache headers
-// TODO: hCalendar microformat for html output
 // TODO: responsive design for html
 // TODO: more css examples
+// TODO: microformat shouldn't have multiple events for day-spanning event
 
 
 function input_json_if_necessary($scriptname,$cachedtime,$expiretime){
@@ -165,7 +163,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 		$todayyear = $cal->get_year();
 		
 		$elcontainer = $doc->createElement("div");
-		$elcontainer->setAttribute("class","cal-container");
+		$elcontainer->setAttribute("class","cal-container vcalendar");
 	
 			if(isset($data->name)){
 				$eltitle = $doc->createElement("h2");
@@ -203,10 +201,10 @@ abstract class HtmlOutputBase extends OutputFormat {
 				
 				$cal->inc_months(1);
 			}
-
-			$currentevents = array();
 	
 			for($plusmonths=0; $plusmonths<self::SHOW_MONTHS; $plusmonths++){
+
+				$currentevents = array();
 	
 				$cal->time = $time;
 				$cal->set_day(1);
@@ -250,14 +248,19 @@ abstract class HtmlOutputBase extends OutputFormat {
 							array_push($currentevents,$data->events[$nextevent]);
 							$nextevent++;
 						}
-						# TODO: copy currevents array so items can be removed during iteration	
-						foreach($currentevents as $event){
-							if($currentevent->{"start-time"} > $endtime || $currentevent->{"end-time"} <= $starttime) {
-								
+						foreach($currentevents as $key=>$event){
+							if($event->{"start-time"} > $endtime || $event->{"end-time"} <= $starttime) {
+								unset($currentevents[$key]);
+								continue;
 							}
 							$eventdata = array();
-							$eventdata["label"] = date("H:i",$event->{"start-time"})
-								."-".date("H:i",$event->{"end-time"})." ".$event->name;
+							$estart = max($starttime,$event->{"start-time"});
+							$eend = min($endtime,$event->{"end-time"});
+							$eventdata["start"] = date("H:i",$estart);
+							$eventdata["startiso"] = date("Y-n-j\TH:i",$estart);
+							$eventdata["end"] = date("H:i",$eend);
+							$eventdata["endiso"] = date("Y-n-j\TH:i",$eend);
+							$eventdata["name"] = $event->name;
 							if(isset($event->url)) $eventdata["url"] = $event->url;
 							array_push($daydata["events"],$eventdata);
 						}
@@ -304,7 +307,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 									$elday->setAttribute("class",$cellclass);
 									
 										$eldate = $doc->createElement("div",$day["date"]);
-										$eldate->setAttribute("class","cal-date");									
+										$eldate->setAttribute("class","cal-date");
 										$elday->appendChild($eldate);
 										
 										if(sizeof($day["events"]) > 0){
@@ -312,20 +315,42 @@ abstract class HtmlOutputBase extends OutputFormat {
 											$elevents->setAttribute("class","cal-events");
 										
 											foreach($day["events"] as $event){
-												if(isset($event["url"])){
-													$elevent = $doc->createElement("div");
-													$elevent->setAttribute("class","cal-event");
-													
-														$eleventurl = $doc->createElement("a",$event["label"]);
+											
+												$elevent = $doc->createElement("div");
+												$elevent->setAttribute("class","cal-event vevent");
+												
+													$ellabelwrapper = NULL;
+													if(isset($event["url"])){
+														$eleventurl = $doc->createElement("a");
 														$eleventurl->setAttribute("href",$event["url"]);
+														$eleventurl->setAttribute("class","url");
 														$elevent->appendChild($eleventurl);
+														$ellabelwrapper = $eleventurl;
+													}else{
+														$ellabelwrapper = $elevent;
+													}
 													
-													$elevents->appendChild($elevent);
-												}else{
-													$elevent = $doc->createElement("div", $event["label"]);
-													$elevent->setAttribute("class","cal-event");
-													$elevents->appendChild($elevent);
-												}
+													$elevstart = $doc->createElement("abbr",$event["start"]);
+													$elevstart->setAttribute("class","dtstart");
+													$elevstart->setAttribute("title",$event["startiso"]);
+													$ellabelwrapper->appendChild($elevstart);
+													
+													$textevhyphen = $doc->createTextNode("-");
+													$ellabelwrapper->appendChild($textevhyphen);
+													
+													$elevend = $doc->createElement("abbr",$event["end"]);
+													$elevend->setAttribute("class","dtend");
+													$elevend->setAttribute("title",$event["endiso"]);
+													$ellabelwrapper->appendChild($elevend);
+													
+													$textevspace = $doc->createTextNode(" ");
+													$ellabelwrapper->appendChild($textevspace);
+													
+													$elevname = $doc->createElement("span",$event["name"]);
+													$elevname->setAttribute("class","summary");
+													$ellabelwrapper->appendChild($elevname);
+													
+												$elevents->appendChild($elevent);
 											}
 											
 											$elday->appendChild($elevents);
@@ -342,6 +367,12 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcontainer->appendChild($elcalendar);
 				
 			}
+			
+			$elprofilelink = $doc->createElement("a","hCalendar compatible");
+			$elprofilelink->setAttribute("rel","profile");
+			$elprofilelink->setAttribute("href","http://microformats.org/profile/hcalendar");
+			$elprofilelink->setAttribute("class","cal-hcal-link");
+			$elcontainer->appendChild($elprofilelink);
 			
 		return $elcontainer;
 	}
@@ -387,6 +418,11 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elcss->setAttribute("type","text/css");
 				$elcss->setAttribute("href",$scriptname.".css");
 				$elhead->appendChild($elcss);
+				
+				$elhcal = $doc->createElement("link");
+				$elhcal->setAttribute("rel","profile");
+				$elhcal->setAttribute("href","http://microformats.org/profile/hcalendar");
+				$elhead->appendChild($elhcal);
 	
 			$elhtml->appendChild($elhead);
 	
@@ -1563,11 +1599,11 @@ function parse_duration($input){
 	if(strlen(trim($input))==0) return FALSE;
 	$matches = array();
 	if(!preg_match("/^\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*$/",$input,$matches)) return FALSE;
-	$dur = 0;
-	if(sizeof($matches) > 1 && $matches[1]) $dur += $matches[1]*60*60*24;
-	if(sizeof($matches) > 2 && $matches[2]) $dur += $matches[2]*60*60;
-	if(sizeof($matches) > 3 && $matches[3]) $dur += $matches[3]*60;
-	return $dur;
+	return array(
+		"days"		=> (sizeof($matches) > 1 && $matches[1]) ? $matches[1] : 0,
+		"hours"		=> (sizeof($matches) > 2 && $matches[2]) ? $matches[2] : 0,
+		"minutes"	=> (sizeof($matches) > 3 && $matches[3]) ? $matches[3] : 0
+	);
 }
 
 function character_encoding_of_output(){
@@ -1592,8 +1628,13 @@ function make_event($eventinfo,$starttime,$duration){
 	$event->name = $eventinfo->name;
 	if(isset($eventinfo->description)) $event->description = $eventinfo->description;
 	if(isset($eventinfo->url)) $event->url = $eventinfo->url;
+	$cal = new Calendar($starttime);
+	$cal->inc_days($duration["days"]);
+	$cal->inc_hours($duration["hours"]);
+	$cal->inc_minutes($duration["minutes"]);
+	$endtime = $cal->time;
 	$event->{"start-time"} = $starttime;
-	$event->{"end-time"} = $starttime + $duration;
+	$event->{"end-time"} = $endtime;
 	return $event;
 }
 

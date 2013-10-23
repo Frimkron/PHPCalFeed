@@ -8,7 +8,7 @@
 .cal-calendar { border-top: 2px solid rgb(200,200,200); border-left: 2px solid rgb(200,200,200); border-right: 2px solid rgb(150,150,150);
 				border-bottom: 2px solid rgb(150,150,150); margin: 0; width: 100%; background-color: white; 
 				border-radius: 0px 0px 20px 20px; padding: 0.1em 0.25em 1.0em 0.25em; box-shadow: 2px 5px 5px rgba(0,0,0,0.5); 
-				float: left; margin-right: -100%; position: relative; height: 40em; }
+				float: left; margin-right: -100%; position: relative; height: 45em; }
 .cal-day { border-top: 1px solid rgb(150,150,150); border-left: 1px solid rgb(150,150,150); border-right: 1px solid rgb(200,200,200); 
 				border-bottom: 1px solid rgb(200,200,200); vertical-align: top; text-align: left; 
 				box-shadow: inset 1px 3px 3px rgb(220,220,220); height: 6em; }
@@ -40,3 +40,6 @@
 				width: 33%; padding: 0.25em 0em; z-index: 8; margin-top: 1em; float: left; height: 1.5em; 
 				margin-bottom: -2.25em; position: relative; }
 .col-nav-link:hover { color: rgb(0,200,200); }
+.cal-hcal-link { font-size: 7pt; display: block; width: 14em; margin: 1em 1em 0 auto; text-align: right; 
+				color: rgb(64,64,64); text-decoration: none; }
+.cal-event abbr { text-decoration: none; border: none; }

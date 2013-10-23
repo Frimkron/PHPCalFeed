@@ -8,15 +8,22 @@
 			"recurrence": "monthly on 2nd to last wed",
 			"time": "09:00",
 			"duration": "3h",
-			"description": "An amazing event that you're all invited to"
+			"description": "An amazing event that you're all invited to",
+			"url": "http://slashdot.org"
 		}
 	],
 	"events": [
 		{
+			"name": "Foobar",
+			"date": "2013-11-03",
+			"time": "09:00",
+			"duration": "3d"
+		},
+		{
 			"name": "Jazz Festival",
-			"date": "2013-10-18",
+			"date": "2013-10-25",
 			"time": "21:00",
-			"duration": "2d",
+			"duration": "1d 1h 5m",
 			"url": "http://google.com"
 		},
 		{
