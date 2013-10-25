@@ -1,13 +1,11 @@
 <?php
 
-// TODO: input discovery
-// TODO: input preference storage in config php
+// TODO: csv input
+// TODO: google calendar input
 // TODO: yaml input
 // TODO: jsonp output (application/javascript)
 // TODO: atom format
 // TODO: yaml output
-// TODO: google calendar input
-// TODO: csv input
 // TODO: wordpress api
 // TODO: textpattern api
 // TODO: sql database input
@@ -25,124 +23,183 @@
 // TODO: microformat shouldn't have multiple events for day-spanning event
 
 
-function input_json_if_necessary($scriptname,$cachedtime,$expiretime){
-	$filename = $scriptname."-master.json";
-	$modifiedtime = filemtime($filename);
-	if($cachedtime > $modifiedtime && $cachedtime > $expiretime){
-		return FALSE;
-	}
-	$handle = @fopen($filename,"r");
-	if($handle===FALSE){
-		return "JSON: File ".$filename." not found";
-	}
-	$json = fread($handle,filesize($filename));
-	fclose($handle);
+abstract class InputFormat {
+
+	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime);
 	
-	$json = do_character_encoding($json);
-	$data = json_decode($json);
-	if($data===NULL){
-		return "JSON: Error in syntax";
+	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime);
+	
+	protected function file_read_due($filename,$cachedtime,$expiretime){
+		return $cachedtime <= filemtime($filename) || $cachedtime <= $expiretime;
 	}
-	if(!is_object($data)){
-		return "JSON: Expected root object";
+}
+
+class NoInput extends InputFormat {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
+		if($formatname != "none") return FALSE;
+		return $this->get_empty_data();
 	}
-	if(isset($data->events)){
-		if(!is_array($data->events)){
-			return "JSON: Expected events to be array";
-		}
-		foreach($data->events as $item){
-			if(!isset($item->name)){
-				return "JSON: Missing event name";
-			}
-			$date_pattern = "/^\d{4}-\d{2}-\d{2}$/";
-			if(!isset($item->date)){
-				return "JSON: Missing event date";
-			}
-			if(!preg_match("/^\d{4}-\d{2}-\d{2}$/",$item->date)){
-				return "JSON: Invalid date format - expected \"yyyy-mm-dd\"";
-			}
-			$bits = explode("-",$item->date);
-			$item->year = $bits[0];
-			$item->month = $bits[1];
-			$item->day = $bits[2];
-			unset($item->date);			
-			if(!isset($item->time)){
-				$item->{"time"} = "00:00";
-			}
-			if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
-				return "JSON: Invalid time format - expected \"hh:mm\"";
-			}
-			$bits = explode(":",$item->time);
-			$item->hour = $bits[0];
-			$item->minute = $bits[1];
-			unset($item->time);
-			if(!isset($item->duration)){
-				$item->duration = "1d";
-			}
-			$result = parse_duration(strtolower($item->duration));
-			if($result===FALSE){
-				return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
-			}
-			$item->duration = $result;				
-		}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+		$result = write_config($scriptname,array("format"=>"none"));
+		if($result) return $result;
+		return $this->get_empty_data();
 	}
-	if(isset($data->{"recurring-events"})){
-		if(!is_array($data->{"recurring-events"})){
-			return "JSON: Expected recurring-events to be array";
-		}
-		foreach($data->{"recurring-events"} as $item){
-			if(!isset($item->name)){
-				return "JSON: Missing recurring-event name";
-			}
-			if(!isset($item->time)){
-				$item->time = "00:00";
-			}
-			if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
-				return "JSON: Invalid time format - expected \"hh:mm\"";
-			}
-			$bits = explode(":",$item->time);
-			$item->hour = $bits[0];
-			$item->minute = $bits[1];
-			unset($item->time);
-			if(!isset($item->duration)){
-				$item->duration = "1d";
-			}
-			$result = parse_duration(strtolower($item->duration));
-			if($result===FALSE){
-				return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
-			}
-			$item->duration = $result;
-			if(!isset($item->recurrence)){
-				return "JSON: Missing event recurrence";
-			}
-			$parser = new RecurrenceParser();
-			$result = $parser->parse(strtolower($item->recurrence));
-			if($result===FALSE){
-				return "JSON: Invalid event recurrence syntax";
-			}
-			$item->recurrence = $result;
-		}
+	
+	private function get_empty_data(){
+		$data = new stdClass();
+		$data->events = array();
+		$data->{"recurring-events"} = array();
+		return $data;
 	}
-	return $data;
+
+}
+
+class JsonInput extends InputFormat {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
+		if($formatname != "json") return FALSE;
+		if(!$this->is_available()) return FALSE;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+		if(!$this->is_available()) return FALSE;
+		if(!file_exists($this->get_filename($scriptname))) return FALSE;
+		$result = write_config($scriptname,array("format"=>"json"));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+
+	private function get_filename($scriptname){
+		return "$scriptname-master.json";
+	}
+	
+	private function is_available(){
+		return extension_loaded("mbstring") && extension_loaded("json");
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		$handle = @fopen($filename,"r");
+		if($handle===FALSE){
+			return "JSON: File ".$filename." not found";
+		}
+		$json = fread($handle,filesize($filename));
+		fclose($handle);
+		
+		$json = do_character_encoding($json);
+		$data = json_decode($json);
+		if($data===NULL){
+			return "JSON: Error in syntax";
+		}
+		if(!is_object($data)){
+			return "JSON: Expected root object";
+		}
+		if(isset($data->events)){
+			if(!is_array($data->events)){
+				return "JSON: Expected events to be array";
+			}
+			foreach($data->events as $item){
+				if(!isset($item->name)){
+					return "JSON: Missing event name";
+				}
+				$date_pattern = "/^\d{4}-\d{2}-\d{2}$/";
+				if(!isset($item->date)){
+					return "JSON: Missing event date";
+				}
+				if(!preg_match("/^\d{4}-\d{2}-\d{2}$/",$item->date)){
+					return "JSON: Invalid date format - expected \"yyyy-mm-dd\"";
+				}
+				$bits = explode("-",$item->date);
+				$item->year = $bits[0];
+				$item->month = $bits[1];
+				$item->day = $bits[2];
+				unset($item->date);			
+				if(!isset($item->time)){
+					$item->{"time"} = "00:00";
+				}
+				if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
+					return "JSON: Invalid time format - expected \"hh:mm\"";
+				}
+				$bits = explode(":",$item->time);
+				$item->hour = $bits[0];
+				$item->minute = $bits[1];
+				unset($item->time);
+				if(!isset($item->duration)){
+					$item->duration = "1d";
+				}
+				$result = parse_duration(strtolower($item->duration));
+				if($result===FALSE){
+					return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
+				}
+				$item->duration = $result;				
+			}
+		}
+		if(isset($data->{"recurring-events"})){
+			if(!is_array($data->{"recurring-events"})){
+				return "JSON: Expected recurring-events to be array";
+			}
+			foreach($data->{"recurring-events"} as $item){
+				if(!isset($item->name)){
+					return "JSON: Missing recurring-event name";
+				}
+				if(!isset($item->time)){
+					$item->time = "00:00";
+				}
+				if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
+					return "JSON: Invalid time format - expected \"hh:mm\"";
+				}
+				$bits = explode(":",$item->time);
+				$item->hour = $bits[0];
+				$item->minute = $bits[1];
+				unset($item->time);
+				if(!isset($item->duration)){
+					$item->duration = "1d";
+				}
+				$result = parse_duration(strtolower($item->duration));
+				if($result===FALSE){
+					return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
+				}
+				$item->duration = $result;
+				if(!isset($item->recurrence)){
+					return "JSON: Missing event recurrence";
+				}
+				$parser = new RecurrenceParser();
+				$result = $parser->parse(strtolower($item->recurrence));
+				if($result===FALSE){
+					return "JSON: Invalid event recurrence syntax";
+				}
+				$item->recurrence = $result;
+			}
+		}
+		return $data;
+	}
 }
 
 abstract class OutputFormat {
 
 	public abstract function write_file_if_possible($scriptname,$data);
 
-	public abstract function attempt_handle_include($scriptname,$output_formats);
+	public abstract function attempt_handle_include($scriptname,$output_formats,$input_formats);
 
-	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats);
+	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats);
 	
-	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats);
+	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats);
 
 	protected abstract function get_filename($scriptname);
 	
 	protected abstract function output($scriptname);
 
-	protected function handle($scriptname,$output_formats){
+	protected function handle($scriptname,$output_formats,$input_formats){
 		$filename = $this->get_filename($scriptname);
-		$error = update_cached_if_necessary($scriptname,$filename,$output_formats);
+		$error = update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats);
 		if($error) return $error;
 		$error = $this->output($scriptname);
 		if($error) return $error;
@@ -380,18 +437,18 @@ abstract class HtmlOutputBase extends OutputFormat {
 
 class HtmlFullOutput extends HtmlOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="html") return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		if(!in_array($mimetype,array("text/html"))) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
 	protected function get_filename($name){
@@ -453,18 +510,18 @@ class HtmlFullOutput extends HtmlOutputBase {
 
 class HtmlFragOutput extends HtmlOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats){
-		$result = $this->handle($scriptname,$output_formats);
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+		$result = $this->handle($scriptname,$output_formats,$input_formats);
 		// echo rather than return, to avoid 500 response from include
 		if($result) echo $result;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="html-frag") return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		return FALSE;
 	}
 
@@ -490,20 +547,20 @@ class HtmlFragOutput extends HtmlOutputBase {
 
 class JsonOutput extends OutputFormat {
 
-	public function attempt_handle_include($scriptname,$output_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="json") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		if(!in_array($mimetype,array("application/json","text/json"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
 	private function is_available(){
@@ -542,18 +599,18 @@ class JsonOutput extends OutputFormat {
 
 class ICalendarOutput extends OutputFormat {
 
-	public function attempt_handle_include($scriptname,$output_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="icalendar") return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		if(!in_array($mimetype,array("text/calendar"))) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
 	protected function get_filename($name){
@@ -605,20 +662,20 @@ class RssOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="rss") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		if(!in_array($mimetype,array("application/rss+xml","application/rss"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
 	protected function get_filename($scriptname){
@@ -698,20 +755,20 @@ class XmlOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;	
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
 		if($name!="xml") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
 		if(!in_array($mimetype,array("text/xml","application/xml"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
 	protected function get_filename($scriptname){
@@ -1908,7 +1965,50 @@ function generate_events($data){
 	return $events;
 }
 
-function update_cached_if_necessary($scriptname,$filename,$output_formats){
+function get_config_filename($scriptname){
+	return "$scriptname-config.php";
+}
+
+function write_config($scriptname,$config){
+	$filename = get_config_filename($scriptname);
+	$handle = fopen($filename,"w");
+	if($handle === FALSE){
+		return "Failed to open '$filename' for writing";
+	}
+	fwrite($handle,"<?php\n");
+	fwrite($handle,"return array(\n");
+	foreach($config as $key=>$value){
+		fwrite($handle,"\t'$key' => '$value',\n");
+	}
+	fwrite($handle,");");	
+	fclose($handle);
+}
+
+function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiretime){
+	$filename = get_config_filename($scriptname);
+	if(file_exists($filename)){
+		$config = include $filename;
+		if(!isset($config["format"])) return "Invalid config: missing format";
+		$formatname = $config["format"];
+		foreach($input_formats as $format){
+			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime);
+			if(is_string($result)) return $result; # error
+			if($result === TRUE) return FALSE; # handled, not modified
+			if($result !== FALSE) return $result; # handled, data
+		}
+		return "Failed to read input for format '$formatname'";
+	}else{
+		foreach($input_formats as $format){
+			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime);
+			if(is_string($result)) return $result; # error;
+			if($result === TRUE) return FALSE; # handled, not modified
+			if($result !== FALSE) return $result; # handled, data
+		}
+		return "Failed to read input in any format";
+	}
+}
+
+function update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats){
 	if(file_exists($filename)){
 		$cachedtime = filemtime($filename);
 		if($cachedtime === FALSE){
@@ -1918,8 +2018,7 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats){
 		$cachedtime = 0;
 	}
 	$expiretime = time()-24*60*60;
-	// TODO: alternative input format if json not available
-	$data = input_json_if_necessary($scriptname,$cachedtime,$expiretime);
+	$data = read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiretime);	
 	if(is_string($data)) return $data; // error
 	if($data===FALSE) return;          // not modified
 	
@@ -1930,12 +2029,12 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats){
 	}
 }
 
-function attempt_handle($scriptname,$output_formats){
+function attempt_handle($scriptname,$output_formats,$input_formats){
 
 	// included from another script
 	if(basename(__FILE__) != basename($_SERVER["SCRIPT_FILENAME"])){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_include($scriptname,$output_formats);
+			$result = $format->attempt_handle_include($scriptname,$output_formats,$input_formats);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -1945,7 +2044,7 @@ function attempt_handle($scriptname,$output_formats){
 	if(array_key_exists("format",$_GET)){
 		$formatname = $_GET["format"];
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats);
+			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats,$input_formats);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -1967,7 +2066,7 @@ function attempt_handle($scriptname,$output_formats){
 	arsort($acceptlist);
 	foreach($acceptlist as $accept => $quality){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats);
+			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats,$input_formats);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -1987,7 +2086,12 @@ $output_formats = array(
 	new XmlOutput()
 );
 
-$result = attempt_handle(basename(__FILE__,".php"),$output_formats);
+$input_formats = array(
+	new JsonInput(),
+	new NoInput()
+);
+
+$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
