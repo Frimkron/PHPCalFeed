@@ -1,18 +1,18 @@
 <?php
 
-// TODO: csv input
+// TODO: facebook input
+// TODO: wordpress api
+// TODO: eventbrite input
 // TODO: google calendar input
+//			iCal parsing
 // TODO: yaml input
 // TODO: jsonp output (application/javascript)
 // TODO: atom format
 // TODO: yaml output
-// TODO: wordpress api
 // TODO: textpattern api
 // TODO: sql database input
 // TODO: web-based UI for config
 // TODO: web-based UI input
-// TODO: facebook input
-// TODO: eventbrite input
 // TODO: other useful input formats
 // TODO: icalendar feed name and link?
 // TODO: icalendar prodid standard?
@@ -24,6 +24,24 @@
 
 
 abstract class InputFormat {
+
+	/*	name
+		description
+		url
+		events	
+			name (required)
+			date (required)
+			time
+			duration
+			description
+			url			
+		recurring-events
+			name (required)
+			recurrence (required)
+			time
+			duration
+			description
+			url				*/
 
 	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime);
 	
@@ -51,6 +69,120 @@ class NoInput extends InputFormat {
 		$data = new stdClass();
 		$data->events = array();
 		$data->{"recurring-events"} = array();
+		return $data;
+	}
+
+}
+
+class CsvInput extends InputFormat {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
+		if($formatname != "csv") return FALSE;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+		if(!file_exists($this->get_filename($scriptname))) return FALSE;
+		$result = write_config($scriptname,array("format"=>"csv"));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	private function get_filename($scriptname){
+		return "$scriptname-master.csv";
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($filename,"r");
+		if($handle === FALSE){
+			return "CSV: File '$filename' not found";
+		}		
+		$header = fgetcsv($handle);
+		if($header === FALSE){
+			return "CSV: Missing header row";
+		}
+		if(sizeof($header)==0){
+			return "CSV: No columns in header row";
+		}
+		$colmap = array();
+		foreach($header as $index => $label){
+			$colmap[strtolower(trim($label))] = $index;
+		}
+		foreach(array("name","date") as $req_key){
+			if(!array_key_exists($req_key,$colmap)){
+				return "CSV: Required column '$req_key' not found in header";
+			}
+		}
+		$data = new stdClass();
+		$data->events= array();
+		$data->{"recurring-events"} = array();
+		
+		while( ($row = fgetcsv($handle)) !== FALSE ){
+			if(sizeof($row)==0 || (sizeof($row)==1 && $row[0]==NULL)) continue; # ignore blank lines
+			while(sizeof($row) < sizeof($colmap)) array_push($row,"");
+		
+			$event = new stdClass();
+			
+			$ename = trim($row[$colmap["name"]]);
+			if(strlen($ename)==0) return "CSV: Missing 'name' value";
+			$event->name = $ename;
+			
+			$edate = trim($row[$colmap["date"]]);
+			if(strlen($edate)==0) return "CSV: Missing 'date' value";
+			if(preg_match("/^\d{4}-\d{2}-\d{2}$/",$edate)){
+				$bits = explode("-",$edate);
+				$event->year = $bits[0];
+				$event->month = $bits[1];
+				$event->day = $bits[2];
+			}else{
+				$parser = new RecurrenceParser();
+				$edate = $parser->parse(strtolower($edate));
+				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
+				$event->recurrence = $edate;
+			}
+			
+			$etime = "";
+			if(array_key_exists("time",$colmap)){
+				$etime = trim($row[$colmap["time"]]);
+			}
+			if(strlen($etime)==0) $etime = "00:00";
+			if(!preg_match("/^\d{2}:\d{2}$/",$etime)) return "CSV: Invalid time format - expected 'hh:mm'";
+			$bits = explode(":",$etime);
+			$event->hour = $bits[0];
+			$event->minute = $bits[1];
+			
+			$eduration = "";
+			if(array_key_exists("duration",$colmap)){
+				$eduration = strtolower(trim($row[$colmap["duration"]]));
+			}
+			if(strlen($eduration)==0) $eduration = "1d";
+			$eduration = parse_duration($eduration);
+			if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0h][0m][0s]'";
+			$event->duration = $eduration;
+			
+			if(array_key_exists("description",$colmap)){
+				$event->description = trim($row[$colmap["description"]]);
+			}
+			
+			if(array_key_exists("url",$colmap)){
+				$event->url = trim($row[$colmap["url"]]);
+			}
+			
+			if(isset($event->recurrence)){
+				array_push($data->{"recurring-events"},$event);
+			}else{
+				array_push($data->events,$event);
+			}				
+		}
+		fclose($handle);
+		
 		return $data;
 	}
 
@@ -89,7 +221,7 @@ class JsonInput extends InputFormat {
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
 		$handle = @fopen($filename,"r");
 		if($handle===FALSE){
-			return "JSON: File ".$filename." not found";
+			return "JSON: File '$filename' not found";
 		}
 		$json = fread($handle,filesize($filename));
 		fclose($handle);
@@ -123,7 +255,7 @@ class JsonInput extends InputFormat {
 				$item->day = $bits[2];
 				unset($item->date);			
 				if(!isset($item->time)){
-					$item->{"time"} = "00:00";
+					$item->time = "00:00";
 				}
 				if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
 					return "JSON: Invalid time format - expected \"hh:mm\"";
@@ -2088,6 +2220,7 @@ $output_formats = array(
 
 $input_formats = array(
 	new JsonInput(),
+	new CsvInput(),
 	new NoInput()
 );
 
