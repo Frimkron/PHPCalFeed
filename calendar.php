@@ -1,8 +1,11 @@
 <?php
 
+// TODO: readme file
 // TODO: facebook input
+//			iCal parsing
 // TODO: wordpress api
 // TODO: eventbrite input
+//			API key
 // TODO: google calendar input
 //			iCal parsing
 // TODO: yaml input
@@ -17,10 +20,11 @@
 // TODO: icalendar feed name and link?
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
-// TODO: browser cache headers
 // TODO: responsive design for html
 // TODO: more css examples
 // TODO: microformat shouldn't have multiple events for day-spanning event
+// TODO: browser cache headers
+
 
 
 abstract class InputFormat {
