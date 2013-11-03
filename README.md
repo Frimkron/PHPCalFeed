@@ -4,11 +4,11 @@ PHPCalFeed
 A simple PHP script for providing calendar feeds for your website in a variety 
 of different formats including iCalendar, RSS, JSON and XML.
 
-1. [Why](#why)
-2. [Requirements](#requirements)
-3. [User Guide](#user-guide)
-4. [Licence](#licence)
-5. [Credits](#credits)
+1. [Why](#1-why)
+2. [Requirements](#2-requirements)
+3. [User Guide](#3-user-guide)
+4. [Licence](#4-licence)
+5. [Credits](#5-credits)
 
 
 1 Why?
@@ -17,7 +17,7 @@ of different formats including iCalendar, RSS, JSON and XML.
 Do you run a website with an events page? Does your site provide any kind of 
 feed for those events? If not, you might want to consider adding one. This 
 allows users to have your events appear directly on their calendar as you 
-publish them. Simplifying the process of discovering, making time for, and 
+publish them, simplifying the process of discovering, making time for, and 
 attending your event.
 
 This script exists to make the addition to your website as easy as possible. 
@@ -48,7 +48,7 @@ FTP client, SCP client or similar:
 ### 3.2 Provide Event Info
 
 The script can read event info from a __CSV__ or __JSON__ file, the former 
-being the simpler option. Events can be one-off occurrences or recurring events 
+being the simpler option. Events can be one-off occurrences or recurring events
 which repeat on a schedule. See the following sections for how to prepare the 
 data file in your chosen format. 
 
@@ -66,7 +66,7 @@ order, each with a heading on the first row of the file:
 * `name` __(required)__ - the title of the event
 * `date` __(required)__ - either a one-off date in `yyyy-mm-dd` format, or the
   spec for a recurring event as described in the 
-  [Event Recurrence Specification](#event-recurrence-specification) section below.
+  [Event Recurrence Specification](#323-event-recurrence-specification) section below.
 * `time` _(optional)_ - the time of day at which the event starts, in the following
   24 hour time format: `hh:mm`. Defaults to midnight.
 * `duration` _(optional)_ - the length of time the event continues for, as a number
@@ -74,6 +74,13 @@ order, each with a heading on the first row of the file:
   24 hours.
 * `description` _(optional)_ - a description of the event
 * `url` _(optional)_ - a link to more information about the event
+
+Below is an example:
+
+Name               Date                     Time          Description
+-----------------  -----------------------  ------------- -------------------------------------
+Halloween Party    2013-10-31               20:30         Come and have a spooktacular time!
+Cool Society       monthly on 1st tue       18:00         Monthly meetup for cool people only
 
 
 #### 3.2.2 JSON Input
@@ -112,7 +119,7 @@ the following properties:
 * `name` __(required)__ - the title of the event, as a string
 * `recurrence` __(required)__ - a string specifying how often the event occurs.
   For details of the format of this property see the 
-  [Event Recurrence Specification](#event-recurrence-specification) section below.
+  [Event Recurrence Specification](#323-event-recurrence-specification) section below.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
   in the following 24 hour time format: `hh:mm`. Defaults to midnight.
 * `duration` _(optional)_ - the length of time the event continues for, as a
