@@ -77,10 +77,10 @@ order, each with a heading on the first row of the file:
 
 Below is an example:
 
-Name               Date                     Time          Description
------------------  -----------------------  ------------- -------------------------------------
-Halloween Party    2013-10-31               20:30         Come and have a spooktacular time!
-Cool Society       monthly on 1st tue       18:00         Monthly meetup for cool people only
+| Name            | Date                  | Time     | Description                         |
+|-----------------|-----------------------|----------|-------------------------------------|
+| Halloween Party | 2013-10-31            | 20:30    | Come and have a spooktacular time!  |
+| Cool Society    | monthly on 1st tue    | 18:00    | Monthly meetup for cool people only |
 
 
 #### 3.2.2 JSON Input
