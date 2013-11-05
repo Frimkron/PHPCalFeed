@@ -24,6 +24,7 @@
 // TODO: more css examples
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
+// TODO: Refactor to use DateTime object rather than procedural date functions
 
 
 
