@@ -1,6 +1,5 @@
 <?php
 
-// TODO: readme file
 // TODO: facebook input
 //			iCal parsing
 // TODO: wordpress api
@@ -750,7 +749,7 @@ class ICalendarOutput extends OutputFormat {
 	}
 
 	protected function get_filename($name){
-		return $name.".ical";
+		return $name.".ics";
 	}
 	
 	private function wrap($text){
