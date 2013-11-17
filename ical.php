@@ -19,7 +19,7 @@ class ICalendarParser {
 		if($this->currentline===FALSE || $this->currentline["name"] != "begin"){
 			return FALSE;
 		}
-		$name = $this->currentline["value"];
+		$name = $this->currentline["values"][0];
 		$props = array();
 		$comps = array();
 		$this->next_content_line();
@@ -27,14 +27,15 @@ class ICalendarParser {
 			if($this->currentline === FALSE) return FALSE;
 			$comp = $this->parse_component();
 			if($comp!==FALSE){
-				array_push($comps,$comp);
-				$this->next_content_line();
+				if(!isset($comps[$comp["name"]])) $comps[$comp["name"]] = array();
+				array_push($comps[$comp["name"]],$comp);
 			}			
-			if($this->currentline["name"]=="end" && $this->currentline["value"]==$name){
+			if($this->currentline["name"]=="end" && $this->currentline["values"][0]==$name){
 				$this->next_content_line();
 				break;
 			}
-			array_push($props,$this->currentline);
+			if(!isset($props[$this->currentline["name"]])) $props[$this->currentline["name"]] = array();
+			array_push($props[$this->currentline["name"]],$this->currentline);
 			$this->next_content_line();
 		}
 		return array("name"=>$name,"properties"=>$props,"components"=>$comps);
@@ -65,7 +66,6 @@ class ICalendarParser {
 		}
 	}
 	
-	// TODO: content value should be an array of values, where non-escaped comma is separator
 	private function parse_content_line($line){
 		$pos = 0;
 		$name = $this->parse_name($line,$pos);
@@ -77,19 +77,20 @@ class ICalendarParser {
 		while(TRUE){
 			$param = $this->parse_param($line,$pos);
 			if($param===FALSE) break;
-			array_push($params,$param);
+			if(!isset($params[$param["name"]])) $params[$param["name"]] = array();
+			array_push($params[$param["name"]],$param);
 		}
 		$c = $this->expect($line,$pos,":",NULL);
 		if($c===FALSE){
 			//echo "no colon";
 			return FALSE;
 		}
-		$value = $this->parse_value($line,$pos);
-		if($value===FALSE){
-			//echo "no value";
+		$values = $this->parse_values($line,$pos);
+		if($values===FALSE){
+			//echo "no values";
 			return FALSE;
 		}
-		return array("name"=>$name, "params"=>$params, "value"=>$value);
+		return array("name"=>$name, "params"=>$params, "values"=>$values);
 	}
 	
 	private function parse_param($line,&$pos){
@@ -132,14 +133,34 @@ class ICalendarParser {
 		return $buffer;
 	}
 	
-	private function parse_value($line,&$pos){
+	private function parse_values($line,&$pos){
+		$vals = array();
 		$buffer = "";
+		$escape = FALSE;
 		while(TRUE){
-			$c = $this->expect($line,$pos,NULL,NULL);
-			if($c===FALSE) break;
-			$buffer .= $c;
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE) break;
+			if($escape){
+				switch($curr){
+					case ";": case ",": case "\\": $buffer .= $curr; break;
+					case "n": case "N": $buffer .= "\n"; break;
+					default: $buffer .= "\\".$curr; break;
+				}
+				$escape = FALSE;
+			}else{
+				if($curr=="\\"){
+					$escape = TRUE;
+				}elseif($curr==","){
+					array_push($vals,$buffer);
+					$buffer = "";
+				}else{
+					$buffer .= $curr;
+				}
+			}	
+			$this->next_char($line,$pos);		
 		}
-		return $buffer;
+		array_push($vals,$buffer);
+		return $vals;
 	}
 	
 	private function parse_name($line,&$pos){
@@ -185,9 +206,93 @@ class ICalendarParser {
 	
 }
 
+function echo_component($comp,$indent){
+	for($i=0;$i<$indent;$i++) echo "\t";
+	echo $comp["name"]."\n";
+	foreach($comp["properties"] as $propname=>$props){
+		for($i=0;$i<$indent+1;$i++) echo "\t";
+		echo $propname."[";
+		foreach($props as $prop){
+			echo "(";
+			foreach($prop["params"] as $paramname=>$params){
+				echo $paramname."=[";
+				foreach($params as $param){
+					echo $param["value"]."|";
+				}
+			}
+			echo ") : ";
+			foreach($prop["values"] as $value){
+				echo $value."|";
+			}
+		}
+		echo "]\n";
+	}
+	foreach($comp["components"] as $compname=>$comps){
+		for($i=0;$i<$indent+1;$i++) echo "\t";
+		echo $compname."\n";
+		foreach($comps as $inner){
+			echo_component($inner,$indent+2);
+		}
+	}
+}
+
+function cal_to_event_data($cal){
+	$calobj = new stdClass();
+	$calobj->events = array();
+	$calobj->{"recurring-events"} = array();
+	if($cal["name"]!="VCALENDAR"){
+		return "Expected VCALENDAR component but found".$cal["name"];
+	}
+	if(isset($cal["properties"]["calscale"]) 
+			&& strtolower($cal["properties"]["calscale"][0]["values"][0]) != "gregorian"){
+		return "Non-gregorian calendar not supported";
+	}
+	if(isset($cal["components"]["VEVENT"])){
+		foreach($cal["components"]["VEVENT"] as $vevent){
+			$eventobj = new stdClass();
+			if(isset($vevent["properties"]["summary"])){
+				$eventobj->name = $vevent["properties"]["summary"][0]["values"][0];
+			}else{
+				$eventobj->name = "Unnamed event";
+			}
+			if(isset($vevent["properties"]["description"]) 
+					&& strlen($vevent["properties"]["description"][0]["values"][0])>0){
+				$eventobj->description = $vevent["properties"]["description"][0]["values"][0];
+			}
+			// TODO: URL?
+			if(isset($vevent["properties"]["rrule"])){
+				// TODO: recurrence
+			}else{
+				// TODO: date
+			}
+			// TODO: time
+			// TODO: duration
+			
+			if(isset($eventobj->recurrence)){
+				array_push($calobj->{"recurring-events"},$eventobj);
+			}else{
+				array_push($calobj->events,$eventobj);
+			}
+		}
+	}
+	return $calobj;
+}
+
 $handle = @fopen("example.ics","r");
 $parser = new ICalendarParser();
 $cal = $parser->parse($handle);
-echo serialize($cal);
+if($cal===FALSE){
+	echo "Failed to parse";
+}else{
+	//echo_component($cal,0);
+	$caldata = cal_to_event_data($cal);
+	if(is_string($caldata)){
+		echo "ERROR: $caldata\n";
+	}else{
+		foreach($caldata->events as $event){
+			echo $event->name."\n";
+		}
+	}
+}
 fclose($handle);
 
