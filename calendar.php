@@ -33,16 +33,20 @@ abstract class InputFormat {
 		url
 		events	
 			name (required)
-			date (required)
-			time
-			duration
+			year (required)
+			month (required)
+			day (required)
+			hour
+			minute
+			duration (days,hours,minutes)
 			description
 			url			
 		recurring-events
 			name (required)
 			recurrence (required)
-			time
-			duration
+			hour
+			minute
+			duration (days,hours,minutes)
 			description
 			url				*/
 

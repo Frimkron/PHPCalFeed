@@ -77,8 +77,7 @@ class ICalendarParser {
 		while(TRUE){
 			$param = $this->parse_param($line,$pos);
 			if($param===FALSE) break;
-			if(!isset($params[$param["name"]])) $params[$param["name"]] = array();
-			array_push($params[$param["name"]],$param);
+			$params[$param["name"]] = $param["value"];
 		}
 		$c = $this->expect($line,$pos,":",NULL);
 		if($c===FALSE){
@@ -90,7 +89,7 @@ class ICalendarParser {
 			//echo "no values";
 			return FALSE;
 		}
-		return array("name"=>$name, "params"=>$params, "values"=>$values);
+		return array("name"=>$name, "parameters"=>$params, "values"=>$values);
 	}
 	
 	private function parse_param($line,&$pos){
@@ -236,6 +235,27 @@ function echo_component($comp,$indent){
 	}
 }
 
+function extract_datetime($property){
+	if(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
+		# date only
+		$matches = array();
+		if(!preg_match("/^(\d{4})(\d{2})(\d{2})$/", trim($dtstart["values"][0]), $matches)){
+			return "Invalid date ".$dtstart["values"][0];
+		}
+		return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], "hour"=>0, "minute"=>0 );
+	}else{
+		# date and time
+		$matches = array();
+		if(!preg_match("/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}(Z)?$/",
+				trim($dtstart["values"][0]), $matches)){
+			return "Invalid date-time ".$dtstart["values"][0];
+		}
+		$isutc = sizeof($matches)>=7 && $matches[6]=="Z"; //TODO - convert timezone
+		return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], 
+					"hour"=>$matches[4], "minute"=>$matches[5] );
+	}
+}
+
 function cal_to_event_data($cal){
 	$calobj = new stdClass();
 	$calobj->events = array();
@@ -262,11 +282,32 @@ function cal_to_event_data($cal){
 			// TODO: URL?
 			if(isset($vevent["properties"]["rrule"])){
 				// TODO: recurrence
-			}else{
-				// TODO: date
+				continue; //ignore for now
+			}else{				
+				if(!isset($vevent["properties"]["dtstart"])) continue; // ignore if no start time
+				$starttime = extract_datetime($vevent["properties"]["dtstart"][0]);
+				$eventobj->year = $starttime["year"];
+				$eventobj->month = $starttime["month"];
+				$eventobj->day = $startime["day"];
+				$eventobj->hour = $starttime["hour"];
+				$eventobj->minute = $starttime["minute"];
 			}
-			// TODO: time
-			// TODO: duration
+			
+			if(isset($vevent["properties"]["dtend"])){
+				$endtime = extract_datetime($vevent["properties"]["dtend"][0]);
+				// TODO: date difference
+			}elseif(isset($vevent["properties"]["duration"])){
+				// TODO: extract duration			
+			}elseif(isset($vevent["properties"]["dtstart"])){
+				$dtstart = $vevent["properties"]["dtstart"][0];
+				if(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
+					$eventobj->duration = array("days"=>1,"hours"=>0,"minutes"=>0);
+				}else{
+					$eventobj->duration = array("days"=>0,"hours"=>0,"minutes"=>0);
+				}
+			}else{
+				return "Cannot determine duration for '".$eventobj->name."'";
+			}
 			
 			if(isset($eventobj->recurrence)){
 				array_push($calobj->{"recurring-events"},$eventobj);
@@ -290,7 +331,7 @@ if($cal===FALSE){
 		echo "ERROR: $caldata\n";
 	}else{
 		foreach($caldata->events as $event){
-			echo $event->name."\n";
+			echo $event->name." @ ".$event->hour.":".$event->minute." on ".$event->year."-".$event->month."-".$event->day."\n";
 		}
 	}
 }
