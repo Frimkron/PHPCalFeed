@@ -236,24 +236,36 @@ function echo_component($comp,$indent){
 }
 
 function extract_datetime($property){
-	if(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
+	if(isset($property["parameters"]["value"]) && strtolower($property["parameters"]["value"])=="date"){
 		# date only
 		$matches = array();
-		if(!preg_match("/^(\d{4})(\d{2})(\d{2})$/", trim($dtstart["values"][0]), $matches)){
-			return "Invalid date ".$dtstart["values"][0];
+		if(!preg_match("/^(\d{4})(\d{2})(\d{2})$/", trim($property["values"][0]), $matches)){
+			return "Invalid date ".$property["values"][0];
 		}
 		return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], "hour"=>0, "minute"=>0 );
 	}else{
 		# date and time
 		$matches = array();
 		if(!preg_match("/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}(Z)?$/",
-				trim($dtstart["values"][0]), $matches)){
-			return "Invalid date-time ".$dtstart["values"][0];
+				trim($property["values"][0]), $matches)){
+			return "Invalid date-time ".$property["values"][0];
 		}
 		$isutc = sizeof($matches)>=7 && $matches[6]=="Z"; //TODO - convert timezone
 		return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], 
 					"hour"=>$matches[4], "minute"=>$matches[5] );
 	}
+}
+
+function extract_duration($property){
+	$matches = array();
+	if(!preg_match("/^[+-]?P(\d+W)?(\d+D)?(?:T(\d+H)?(\d+M)?(\d+S)?)?$/",trim($property["values"][0]), $matches)){
+		return "Invalid duration ".$property["values"][0];
+	}
+	$weeks = sizeof($matches)>=2 && $matches[1]!="" ? $matches[1] : 0;
+	$days = sizeof($matches)>=3 && $matches[2]!="" ? $matches[2] : 0;
+	$hours = sizeof($matches)>=4 && $matches[3]!="" ? $matches[3] : 0;
+	$minutes = sizeof($matches)>=5 && $matches[4]!="" ? $matches[4] : 0;
+	return array( "days"=>$weeks*7+$days, "hours"=>$hours, "minutes"=>$minutes );
 }
 
 function cal_to_event_data($cal){
@@ -268,41 +280,61 @@ function cal_to_event_data($cal){
 		return "Non-gregorian calendar not supported";
 	}
 	if(isset($cal["components"]["VEVENT"])){
-		foreach($cal["components"]["VEVENT"] as $vevent){
+		foreach($cal["components"]["VEVENT"] as $vevent){			
 			$eventobj = new stdClass();
+			
 			if(isset($vevent["properties"]["summary"])){
 				$eventobj->name = $vevent["properties"]["summary"][0]["values"][0];
 			}else{
 				$eventobj->name = "Unnamed event";
 			}
+			
 			if(isset($vevent["properties"]["description"]) 
 					&& strlen($vevent["properties"]["description"][0]["values"][0])>0){
 				$eventobj->description = $vevent["properties"]["description"][0]["values"][0];
 			}
-			// TODO: URL?
+			
+			if(isset($vevent["properties"]["url"])){
+				$eventobj->url = $vevent["properties"]["url"][0]["values"][0];
+			}			
+			
 			if(isset($vevent["properties"]["rrule"])){
 				// TODO: recurrence
 				continue; //ignore for now
 			}else{				
+				// non-recurring
 				if(!isset($vevent["properties"]["dtstart"])) continue; // ignore if no start time
 				$starttime = extract_datetime($vevent["properties"]["dtstart"][0]);
 				$eventobj->year = $starttime["year"];
 				$eventobj->month = $starttime["month"];
-				$eventobj->day = $startime["day"];
+				$eventobj->day = $starttime["day"];
 				$eventobj->hour = $starttime["hour"];
 				$eventobj->minute = $starttime["minute"];
 			}
 			
-			if(isset($vevent["properties"]["dtend"])){
-				$endtime = extract_datetime($vevent["properties"]["dtend"][0]);
-				// TODO: date difference
-			}elseif(isset($vevent["properties"]["duration"])){
-				// TODO: extract duration			
+			if(isset($vevent["properties"]["duration"])){
+				// duration specified
+				$eventobj->duration = extract_duration($vevent["properties"]["duration"][0]);
 			}elseif(isset($vevent["properties"]["dtstart"])){
 				$dtstart = $vevent["properties"]["dtstart"][0];
-				if(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
+				if(isset($vevent["properties"]["dtend"])){
+					// start and end specified
+					$starttime = extract_datetime($dtstart);
+					$startcal = new DateTime();
+					$startcal->setDate($starttime["year"],$starttime["month"],$starttime["day"]);
+					$startcal->setTime($starttime["hour"],$starttime["minute"]);
+					$endtime = extract_datetime($vevent["properties"]["dtend"][0]);
+					$endcal = new DateTime();
+					$endcal->setDate($endtime["year"],$endtime["month"],$endtime["day"]);
+					$endcal->setTime($endtime["hour"],$endtime["minute"]);
+					$diff = $startcal->diff($endcal);
+					$eventobj->duration = array( "days" => $diff->y*365 + $diff->m*31 + $diff->d, //close enough :/
+							"hours" => $diff->h, "minutes" => $diff->i );					
+				}elseif(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
+					// start specified as date
 					$eventobj->duration = array("days"=>1,"hours"=>0,"minutes"=>0);
 				}else{
+					// start specified as datetime
 					$eventobj->duration = array("days"=>0,"hours"=>0,"minutes"=>0);
 				}
 			}else{
@@ -331,7 +363,14 @@ if($cal===FALSE){
 		echo "ERROR: $caldata\n";
 	}else{
 		foreach($caldata->events as $event){
-			echo $event->name." @ ".$event->hour.":".$event->minute." on ".$event->year."-".$event->month."-".$event->day."\n";
+			echo "name: ".$event->name."\n";
+			if(isset($event->description)) echo "desc: ".$event->description."\n";
+			echo "date: ".$event->year."/".$event->month."/".$event->day."\n";
+			if(isset($event->hour) && isset($event->minute)) echo "time: ".$event->hour.":".$event->minute."\n";
+			if(isset($event->duration)) echo "duration: ".$event->duration["days"]."d "
+					.$event->duration["hours"]."h ".$event->duration["minutes"]."m\n";
+			if(isset($event->url)) echo "url: ".$event->url."\n";
+			echo "-----\n";
 		}
 	}
 }
