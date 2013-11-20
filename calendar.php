@@ -99,7 +99,7 @@ abstract class ICalendarBaseInput extends InputFormat {
 			return "Non-gregorian calendar not supported";
 		}
 		if(isset($cal["components"]["VEVENT"])){
-			foreach($cal["components"]["VEVENT"] as $vevent){			
+			foreach($cal["components"]["VEVENT"] as $vevent){
 				$eventobj = new stdClass();
 				
 				if(isset($vevent["properties"]["summary"])){
@@ -122,7 +122,9 @@ abstract class ICalendarBaseInput extends InputFormat {
 					continue; //ignore for now
 				}else{				
 					// non-recurring
-					if(!isset($vevent["properties"]["dtstart"])) continue; // ignore if no start time
+					if(!isset($vevent["properties"]["dtstart"])){
+						continue; // ignore if no start time
+					}
 					$starttime = $this->extract_datetime($vevent["properties"]["dtstart"][0]);
 					$eventobj->year = $starttime["year"];
 					$eventobj->month = $starttime["month"];
@@ -203,6 +205,43 @@ abstract class ICalendarBaseInput extends InputFormat {
 		return array( "days"=>$weeks*7+$days, "hours"=>$hours, "minutes"=>$minutes );
 	}
 } 
+
+class ICalendarInput extends ICalendarBaseInput {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
+		if($formatname != "icalendar") return FALSE;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+		if(!file_exists($this->get_filename($scriptname))) return FALSE;
+		$result = write_config($scriptname,array("format"=>"icalendar"));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	private function get_filename($scriptname){
+		return "$scriptname-master.ics";
+	}
+
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($filename,"r");
+		if($handle === FALSE){
+			return "ICalendar: File '$filename' not found";
+		}
+		$data = $this->feed_to_event_data($handle);
+		if(is_string($data)) return "ICalendar: $data";
+		fclose($handle);
+		return $data;
+	}
+}
 
 class CsvInput extends InputFormat {
 
@@ -1842,9 +1881,7 @@ class ICalendarParser {
 	}
 	
 	private function parse_component(){
-		if($this->currentline===FALSE || $this->currentline["name"] != "begin"){
-			return FALSE;
-		}
+		if($this->currentline===FALSE || $this->currentline["name"] != "begin") return FALSE;
 		$name = $this->currentline["values"][0];
 		$props = array();
 		$comps = array();
@@ -1855,14 +1892,14 @@ class ICalendarParser {
 			if($comp!==FALSE){
 				if(!isset($comps[$comp["name"]])) $comps[$comp["name"]] = array();
 				array_push($comps[$comp["name"]],$comp);
-			}			
-			if($this->currentline["name"]=="end" && $this->currentline["values"][0]==$name){
+			}elseif($this->currentline["name"]=="end" && $this->currentline["values"][0]==$name){
 				$this->next_content_line();
 				break;
+			}else{
+				if(!isset($props[$this->currentline["name"]])) $props[$this->currentline["name"]] = array();
+				array_push($props[$this->currentline["name"]],$this->currentline);
+				$this->next_content_line();
 			}
-			if(!isset($props[$this->currentline["name"]])) $props[$this->currentline["name"]] = array();
-			array_push($props[$this->currentline["name"]],$this->currentline);
-			$this->next_content_line();
 		}
 		return array("name"=>$name,"properties"=>$props,"components"=>$comps);
 	}
@@ -2547,6 +2584,7 @@ $output_formats = array(
 );
 
 $input_formats = array(
+	new ICalendarInput(),
 	new JsonInput(),
 	new CsvInput(),
 	new NoInput()
