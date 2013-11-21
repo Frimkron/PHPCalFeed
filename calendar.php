@@ -1,12 +1,11 @@
 <?php
 
+// TODO: remote file input
 // TODO: facebook input
-//			iCal parsing
+// TODO: google calendar input
+// TODO: icalendar recurring events
 // TODO: wordpress api
 // TODO: eventbrite input
-//			API key
-// TODO: google calendar input
-//			iCal parsing
 // TODO: yaml input
 // TODO: jsonp output (application/javascript)
 // TODO: atom format
@@ -50,23 +49,27 @@ abstract class InputFormat {
 			description
 			url				*/
 
-	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime);
+	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config);
 	
-	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime);
+	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config);
 	
 	protected function file_read_due($filename,$cachedtime,$expiretime){
 		return $cachedtime <= filemtime($filename) || $cachedtime <= $expiretime;
+	}
+	
+	protected function url_read_due($cachedtime,$expiretime){
+		return $cachedtime <= $expiretime;
 	}
 }
 
 class NoInput extends InputFormat {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
 		if($formatname != "none") return FALSE;
 		return $this->get_empty_data();
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		$result = write_config($scriptname,array("format"=>"none"));
 		if($result) return $result;
 		return $this->get_empty_data();
@@ -81,7 +84,7 @@ class NoInput extends InputFormat {
 
 }
 
-abstract class ICalendarBaseInput extends InputFormat {
+abstract class ICalendarInputBase extends InputFormat {
 
 	protected function feed_to_event_data($filehandle){
 		$parser = new ICalendarParser();
@@ -206,18 +209,18 @@ abstract class ICalendarBaseInput extends InputFormat {
 	}
 } 
 
-class ICalendarInput extends ICalendarBaseInput {
+class LocalICalendarInput extends ICalendarInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
-		if($formatname != "icalendar") return FALSE;
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "icalendar-local") return FALSE;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"icalendar"));
+		$result = write_config($scriptname,array("format"=>"icalendar-local"));
 		if($result) return $result;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
@@ -243,18 +246,53 @@ class ICalendarInput extends ICalendarBaseInput {
 	}
 }
 
-class CsvInput extends InputFormat {
+class RemoteICalendarInput extends ICalendarInputBase {
+	
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "icalendar-remote") return FALSE;
+		if(!isset($config["url"])) return "ICalendar: missing config parameter: 'url'";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!isset($config["url"])) return FALSE;
+		if(strtolower(substr($config["url"],-4,4)) != ".ics") return FALSE;
+		$result = write_config($scriptname,array("format"=>"icalendar-remote","url"=>$config["url"]));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
+		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($url,"r");
+		if($handle === FALSE){
+			return "ICalendar: Could not open '$url'";
+		}
+		$data = $this->feed_to_event_data($handle);
+		if(is_string($data)) return "ICalendar: $data";
+		fclose($handle);
+		return $data;
+	}
+	
+}
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
-		if($formatname != "csv") return FALSE;
+class LocalCsvInput extends InputFormat {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "csv-local") return FALSE;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv"));
+		$result = write_config($scriptname,array("format"=>"csv-local"));
 		if($result) return $result;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
@@ -357,20 +395,20 @@ class CsvInput extends InputFormat {
 
 }
 
-class JsonInput extends InputFormat {
+class LocalJsonInput extends InputFormat {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime){
-		if($formatname != "json") return FALSE;
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "json-local") return FALSE;
 		if(!$this->is_available()) return FALSE;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!$this->is_available()) return FALSE;
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"json"));
+		$result = write_config($scriptname,array("format"=>"json-local"));
 		if($result) return $result;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
@@ -2485,10 +2523,13 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiret
 	$filename = get_config_filename($scriptname);
 	if(file_exists($filename)){
 		$config = include $filename;
-		if(!isset($config["format"])) return "Invalid config: missing format";
+	}else{
+		$config = array();
+	}
+	if(isset($config["format"])){	
 		$formatname = $config["format"];
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime);
+			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config);
 			if(is_string($result)) return $result; # error
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -2496,7 +2537,7 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiret
 		return "Failed to read input for format '$formatname'";
 	}else{
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime);
+			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config);
 			if(is_string($result)) return $result; # error;
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -2584,9 +2625,10 @@ $output_formats = array(
 );
 
 $input_formats = array(
-	new ICalendarInput(),
-	new JsonInput(),
-	new CsvInput(),
+	new RemoteICalendarInput(),
+	new LocalICalendarInput(),
+	new LocalJsonInput(),
+	new LocalCsvInput(),
 	new NoInput()
 );
 
