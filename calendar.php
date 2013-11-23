@@ -1,14 +1,19 @@
 <?php
 
-// TODO: remote file input
-// TODO: facebook input
-// TODO: google calendar input
+// TODO: createElement doesnt escape its damn contents
 // TODO: icalendar recurring events
+// TODO: fix html output layout for 6-week months
+// TODO: icalendar over-escaped files?
+// TODO: update readme
+// TODO: facebook input
+//		feasible using oath?
 // TODO: wordpress api
+//		most common use case?
 // TODO: eventbrite input
+//		api requires oauth?
 // TODO: yaml input
-// TODO: jsonp output (application/javascript)
-// TODO: atom format
+// TODO: yaml output
+// TODO: atom output
 // TODO: yaml output
 // TODO: textpattern api
 // TODO: sql database input
@@ -89,31 +94,31 @@ abstract class ICalendarInputBase extends InputFormat {
 	protected function feed_to_event_data($filehandle){
 		$parser = new ICalendarParser();
 		$cal = $parser->parse($filehandle);
-		if($cal===FALSE) return "Invalid ICalendar feed";
+		if(is_string($cal)) return "ICalendar: Invalid ICalendar feed: $cal";
 	
 		$calobj = new stdClass();
 		$calobj->events = array();
 		$calobj->{"recurring-events"} = array();
 		if($cal["name"]!="VCALENDAR"){
-			return "Expected VCALENDAR component but found".$cal["name"];
+			return "ICalendar: Expected VCALENDAR component but found".$cal["name"];
 		}
 		if(isset($cal["properties"]["calscale"]) 
 				&& strtolower($cal["properties"]["calscale"][0]["values"][0]) != "gregorian"){
-			return "Non-gregorian calendar not supported";
+			return "ICalendar: Non-gregorian calendar not supported";
 		}
 		if(isset($cal["components"]["VEVENT"])){
 			foreach($cal["components"]["VEVENT"] as $vevent){
 				$eventobj = new stdClass();
 				
 				if(isset($vevent["properties"]["summary"])){
-					$eventobj->name = $vevent["properties"]["summary"][0]["values"][0];
+					$eventobj->name = $this->concat_prop_values($vevent["properties"]["summary"]);
 				}else{
 					$eventobj->name = "Unnamed event";
 				}
 				
 				if(isset($vevent["properties"]["description"]) 
 						&& strlen($vevent["properties"]["description"][0]["values"][0])>0){
-					$eventobj->description = $vevent["properties"]["description"][0]["values"][0];
+					$eventobj->description = $this->concat_prop_values($vevent["properties"]["description"]);
 				}
 				
 				if(isset($vevent["properties"]["url"])){
@@ -129,6 +134,7 @@ abstract class ICalendarInputBase extends InputFormat {
 						continue; // ignore if no start time
 					}
 					$starttime = $this->extract_datetime($vevent["properties"]["dtstart"][0]);
+					if(is_string($starttime)) return $starttime;
 					$eventobj->year = $starttime["year"];
 					$eventobj->month = $starttime["month"];
 					$eventobj->day = $starttime["day"];
@@ -138,16 +144,21 @@ abstract class ICalendarInputBase extends InputFormat {
 				
 				if(isset($vevent["properties"]["duration"])){
 					// duration specified
-					$eventobj->duration = $this->extract_duration($vevent["properties"]["duration"][0]);
+					$duration = $this->extract_duration($vevent["properties"]["duration"][0]);
+					if(is_string($duration)) return $duration;
+					$eventobj->duration = $duration;
+					
 				}elseif(isset($vevent["properties"]["dtstart"])){
 					$dtstart = $vevent["properties"]["dtstart"][0];
 					if(isset($vevent["properties"]["dtend"])){
 						// start and end specified
 						$starttime = $this->extract_datetime($dtstart);
+						if(is_string($starttime)) return $starttime;
 						$startcal = new DateTime();
 						$startcal->setDate($starttime["year"],$starttime["month"],$starttime["day"]);
 						$startcal->setTime($starttime["hour"],$starttime["minute"]);
 						$endtime = $this->extract_datetime($vevent["properties"]["dtend"][0]);
+						if(is_string($endtime)) return $endtime;
 						$endcal = new DateTime();
 						$endcal->setDate($endtime["year"],$endtime["month"],$endtime["day"]);
 						$endcal->setTime($endtime["hour"],$endtime["minute"]);
@@ -162,7 +173,7 @@ abstract class ICalendarInputBase extends InputFormat {
 						$eventobj->duration = array("days"=>0,"hours"=>0,"minutes"=>0);
 					}
 				}else{
-					return "Cannot determine duration for '".$eventobj->name."'";
+					return "ICalendar: Cannot determine duration for '".$eventobj->name."'";
 				}
 				
 				if(isset($eventobj->recurrence)){
@@ -175,12 +186,22 @@ abstract class ICalendarInputBase extends InputFormat {
 		return $calobj;
 	}
 
+	private function concat_prop_values($properties){
+		$result = "";
+		foreach($properties as $prop){
+			foreach($prop["values"] as $value){
+				$result .= $value;
+			}
+		}
+		return $result;
+	}
+
 	private function extract_datetime($property){
 		if(isset($property["parameters"]["value"]) && strtolower($property["parameters"]["value"])=="date"){
 			# date only
 			$matches = array();
 			if(!preg_match("/^(\d{4})(\d{2})(\d{2})$/", trim($property["values"][0]), $matches)){
-				return "Invalid date ".$property["values"][0];
+				return "ICalendar: Invalid date ".$property["values"][0];
 			}
 			return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], "hour"=>0, "minute"=>0 );
 		}else{
@@ -188,7 +209,7 @@ abstract class ICalendarInputBase extends InputFormat {
 			$matches = array();
 			if(!preg_match("/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}(Z)?$/",
 					trim($property["values"][0]), $matches)){
-				return "Invalid date-time ".$property["values"][0];
+				return "ICalendar: Invalid date-time ".$property["values"][0];
 			}
 			$isutc = sizeof($matches)>=7 && $matches[6]=="Z"; //TODO - convert timezone
 			return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], 
@@ -199,7 +220,7 @@ abstract class ICalendarInputBase extends InputFormat {
 	private function extract_duration($property){
 		$matches = array();
 		if(!preg_match("/^[+-]?P(\d+W)?(\d+D)?(?:T(\d+H)?(\d+M)?(\d+S)?)?$/",trim($property["values"][0]), $matches)){
-			return "Invalid duration ".$property["values"][0];
+			return "ICalendar: Invalid duration ".$property["values"][0];
 		}
 		$weeks = sizeof($matches)>=2 && $matches[1]!="" ? $matches[1] : 0;
 		$days = sizeof($matches)>=3 && $matches[2]!="" ? $matches[2] : 0;
@@ -273,44 +294,17 @@ class RemoteICalendarInput extends ICalendarInputBase {
 		if($handle === FALSE){
 			return "ICalendar: Could not open '$url'";
 		}
-		$data = $this->feed_to_event_data($handle);
-		if(is_string($data)) return "ICalendar: $data";
+		$result = $this->feed_to_event_data($handle);
 		fclose($handle);
-		return $data;
+		return $result;
 	}
 	
 }
 
-class LocalCsvInput extends InputFormat {
+abstract class CsvInputBase extends InputFormat {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
-		if($formatname != "csv-local") return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
-		if($result === FALSE) return TRUE;
-		return $result;
-	}
+	protected function stream_to_event_data($handle){
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
-		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv-local"));
-		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
-		if($result === FALSE) return TRUE;
-		return $result;
-	}
-	
-	private function get_filename($scriptname){
-		return "$scriptname-master.csv";
-	}
-	
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
-		
-		$handle = @fopen($filename,"r");
-		if($handle === FALSE){
-			return "CSV: File '$filename' not found";
-		}		
 		$header = fgetcsv($handle);
 		if($header === FALSE){
 			return "CSV: Missing header row";
@@ -388,50 +382,93 @@ class LocalCsvInput extends InputFormat {
 				array_push($data->events,$event);
 			}				
 		}
-		fclose($handle);
 		
 		return $data;
 	}
 
 }
 
-class LocalJsonInput extends InputFormat {
+class LocalCsvInput extends CsvInputBase {
 
 	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
-		if($formatname != "json-local") return FALSE;
-		if(!$this->is_available()) return FALSE;
+		if($formatname != "csv-local") return FALSE;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
 	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
-		if(!$this->is_available()) return FALSE;
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"json-local"));
+		$result = write_config($scriptname,array("format"=>"csv-local"));
 		if($result) return $result;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
-
-	private function get_filename($scriptname){
-		return "$scriptname-master.json";
-	}
 	
-	private function is_available(){
-		return extension_loaded("mbstring") && extension_loaded("json");
+	private function get_filename($scriptname){
+		return "$scriptname-master.csv";
 	}
 	
 	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
 		$filename = $this->get_filename($scriptname);
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		
 		$handle = @fopen($filename,"r");
-		if($handle===FALSE){
-			return "JSON: File '$filename' not found";
-		}
-		$json = fread($handle,filesize($filename));
+		if($handle === FALSE){
+			return "CSV: File '$filename' not found";
+		}		
+		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
+		
+		return $result;
+	}
+
+}
+
+class RemoteCsvInput extends CsvInputBase {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "csv-remote") return FALSE;
+		if(!isset($config["url"])) return "CSV: missing config parameter: 'url'";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!isset($config["url"])) return FALSE;
+		if(strtolower(substr($config["url"],-4,4)) != ".csv") return FALSE;
+		$result = write_config($scriptname,array("format"=>"csv-remote","url"=>$config["url"]));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
+		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($url,"r");
+		if($handle === FALSE){
+			return "CSV: Could not open '$url'";
+		}
+		$result = $this->stream_to_event_data($handle);
+		fclose($handle);
+		return $result;
+	}
+
+}
+
+abstract class JsonInputBase extends InputFormat {
+
+	protected function is_available(){
+		return extension_loaded("mbstring") && extension_loaded("json");
+	}
+
+	protected function stream_to_event_data($handle){
+	
+		$json = stream_get_contents($handle);
 		
 		$json = do_character_encoding($json);
 		$data = json_decode($json);
@@ -519,6 +556,78 @@ class LocalJsonInput extends InputFormat {
 			}
 		}
 		return $data;
+	}
+
+}
+
+class LocalJsonInput extends JsonInputBase {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "json-local") return FALSE;
+		if(!$this->is_available()) return FALSE;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!$this->is_available()) return FALSE;
+		if(!file_exists($this->get_filename($scriptname))) return FALSE;
+		$result = write_config($scriptname,array("format"=>"json-local"));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+
+	private function get_filename($scriptname){
+		return "$scriptname-master.json";
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($filename,"r");
+		if($handle===FALSE){
+			return "JSON: File '$filename' not found";
+		}
+		$result = $this->stream_to_event_data($handle);
+		fclose($handle);
+		return $result;
+	}
+}
+
+class RemoteJsonInput extends JsonInputBase {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "json-remote") return FALSE;
+		if(!isset($config["url"])) return "JSON: missing config parameter: 'url'";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!isset($config["url"])) return FALSE;
+		if(strtolower(substr($config["url"],-4,4)) != ".json") return FALSE;
+		$result = write_config($scriptname,array("format"=>"json-remote","url"=>$config["url"]));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
+		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($url,"r");
+		if($handle === FALSE){
+			return "JSON: Could not open '$url'";
+		}
+		$result = $this->stream_to_event_data($handle);
+		fclose($handle);
+		return $result;
 	}
 }
 
@@ -884,7 +993,24 @@ class HtmlFragOutput extends HtmlOutputBase {
 	}
 }
 
-class JsonOutput extends OutputFormat {
+abstract class JsonOutputBase extends OutputFormat {
+
+	protected function is_available(){
+		return extension_loaded("mbstring") && extension_loaded("json");
+	}
+	
+	protected function write_to_stream($handle,$data){
+		$data = unserialize(serialize($data)); //deep copy
+		foreach($data->events as $item){
+			$item->{"start-time"} = date("c",$item->{"start-time"});
+			$item->{"end-time"} = date("c",$item->{"end-time"});
+		}
+		fwrite($handle,json_encode($data,JSON_PRETTY_PRINT));
+	}
+
+}
+
+class JsonOutput extends JsonOutputBase {
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
 		return FALSE;
@@ -902,10 +1028,6 @@ class JsonOutput extends OutputFormat {
 		return $this->handle($scriptname,$output_formats,$input_formats);
 	}
 
-	private function is_available(){
-		return extension_loaded("mbstring") && extension_loaded("json");
-	}
-
 	protected function get_filename($scriptname){
 		return $scriptname.".json";	
 	}
@@ -913,17 +1035,12 @@ class JsonOutput extends OutputFormat {
 	public function write_file_if_possible($scriptname,$data){
 		if(!$this->is_available()) return;
 		
-		$data = unserialize(serialize($data)); //deep copy
-		foreach($data->events as $item){
-			$item->{"start-time"} = date("c",$item->{"start-time"});
-			$item->{"end-time"} = date("c",$item->{"end-time"});
-		}
 		$filename = $this->get_filename($scriptname);
 		$handle = @fopen($filename,"w");
 		if($handle === FALSE){
 			return "Failed to open ".$filename." for writing";
 		}
-		fwrite($handle,json_encode($data,JSON_PRETTY_PRINT));
+		$this->write_to_stream($handle,$data);
 		fclose($handle);
 	}
 	
@@ -934,6 +1051,51 @@ class JsonOutput extends OutputFormat {
 			return "Error reading ".$filename;
 		}
 	}	
+}
+
+class JsonpOutput extends JsonOutputBase {
+
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+		if($name!="jsonp") return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return $this->handle($scriptname,$output_formats,$input_formats);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+		if(!in_array($mimetype,array("application/javascript","text/javascript"))) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return $this->handle($scriptname,$output_formats,$input_formats);
+	}
+
+	protected function get_filename($scriptname){
+		return $scriptname.".js";	
+	}
+	
+	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
+		
+		$filename = $this->get_filename($scriptname);
+		$handle = @fopen($filename,"w");
+		if($handle === FALSE){
+			return "Failed to open ".$filename." for writing";
+		}
+		fwrite($handle,"calendar_data(");
+		$this->write_to_stream($handle,$data);
+		fwrite($handle,")");
+		fclose($handle);
+	}
+	
+	public function output($scriptname){
+		header("Content-Type: application/javascript; charset=".character_encoding_of_output());
+		$filename = $this->get_filename($scriptname);
+		if( @readfile($filename) === FALSE ){
+			return "Error reading ".$filename;
+		}
+	}
 }
 
 class ICalendarOutput extends OutputFormat {
@@ -960,6 +1122,13 @@ class ICalendarOutput extends OutputFormat {
 		return preg_replace("/[^\n\r]{75}/","$0\r\n ",$text);
 	}
 	
+	private function escape_value($text){
+		return str_replace(
+			array("\n", "\r", "\\",  ","  ),
+			array("\\n","\\r","\\\\","\\,"),
+			$text);
+	}
+	
 	public function write_file_if_possible($scriptname,$data){
 		$filename = $this->get_filename($scriptname);
 		$handle = fopen($filename,"w");
@@ -968,17 +1137,16 @@ class ICalendarOutput extends OutputFormat {
 		}
 		fwrite($handle,"BEGIN:VCALENDAR\r\n");
 		fwrite($handle,"VERSION:2.0\r\n");
-		fwrite($handle,"PRODID:Calendar Script\r\n");
 		foreach($data->events as $item){
 			fwrite($handle,"BEGIN:VEVENT\r\n");
 			fwrite($handle,"DTSTART:".gmdate("Ymd\THis\Z",$item->{"start-time"})."\r\n");
 			fwrite($handle,"DTEND:".gmdate("Ymd\THis\Z",$item->{"end-time"})."\r\n");
-			fwrite($handle,$this->wrap("SUMMARY:".$item->name)."\r\n");
+			fwrite($handle,$this->wrap("SUMMARY:".$this->escape_value($item->name))."\r\n");
 			if(isset($item->description)){
-				fwrite($handle,$this->wrap("DESCRIPTION:".$item->description)."\r\n");
+				fwrite($handle,$this->wrap("DESCRIPTION:".$this->escape_value($item->description))."\r\n");
 			}
 			if(isset($item->url)){
-				fwrite($handle,$this->wrap("URL:".$item->url)."\r\n");
+				fwrite($handle,$this->wrap("URL:".$this->escape_value($item->url))."\r\n");
 			}
 			fwrite($handle,"END:VEVENT\r\n");
 		}
@@ -1910,33 +2078,44 @@ class ICalendarParser {
 
 	public function parse($filehandle){
 		$this->filehandle = $filehandle;
-		$this->next_content_line();
-		$this->next_content_line();
-		$cal = $this->parse_component();
-		if($cal===FALSE) return FALSE;
-		if($this->currentline !== FALSE) return FALSE;
-		return $cal;
+		for($i=0; $i<2; $i++){
+			$result = $this->next_content_line();
+			if(is_string($result)) return $result;
+		}
+		$result = $this->parse_component();
+		if(is_string($result)) return $result;
+		if($this->currentline !== FALSE) return "Expected end of file";
+		return $result;
 	}
 	
 	private function parse_component(){
-		if($this->currentline===FALSE || $this->currentline["name"] != "begin") return FALSE;
+		if($this->currentline===FALSE || $this->currentline["name"] != "begin"){
+			return "Expected BEGIN property";
+		}
 		$name = $this->currentline["values"][0];
 		$props = array();
 		$comps = array();
-		$this->next_content_line();
+		$result = $this->next_content_line();
+		if(is_string($result)) return $result;
 		while(TRUE){
-			if($this->currentline === FALSE) return FALSE;
-			$comp = $this->parse_component();
-			if($comp!==FALSE){
-				if(!isset($comps[$comp["name"]])) $comps[$comp["name"]] = array();
-				array_push($comps[$comp["name"]],$comp);
-			}elseif($this->currentline["name"]=="end" && $this->currentline["values"][0]==$name){
-				$this->next_content_line();
+			if($this->currentline === FALSE) return "Unexpected end of file";
+			if($this->currentline["name"]=="begin"){
+				$result = $this->parse_component();
+				if(is_string($result)) return $result;	
+				if(!isset($comps[$result["name"]])) $comps[$result["name"]] = array();
+				array_push($comps[$result["name"]],$result);
+			}elseif($this->currentline["name"]=="end"){
+				if($this->currentline["values"][0]!=$name){
+					return "Unexpected end of ".$this->currentline["values"][0]." component";
+				}
+				$result = $this->next_content_line();
+				if(is_string($result)) return $result;
 				break;
 			}else{
 				if(!isset($props[$this->currentline["name"]])) $props[$this->currentline["name"]] = array();
 				array_push($props[$this->currentline["name"]],$this->currentline);
-				$this->next_content_line();
+				$result = $this->next_content_line();
+				if(is_string($result)) return $result;
 			}
 		}
 		return array("name"=>$name,"properties"=>$props,"components"=>$comps);
@@ -1951,17 +2130,25 @@ class ICalendarParser {
 			$fline = fgets($this->filehandle);
 			if($fline === FALSE){
 				if(strlen($this->linebuffer)>0){
-					$this->currentline = $this->parse_content_line($this->linebuffer);
+					$result = $this->parse_content_line($this->linebuffer);
+					if(is_string($result)) return $result;
+					$this->currentline = $result;
 				}
 				$this->linebuffer = FALSE;
 				break;
+			}
+			$fline = preg_replace("/[\n\r]/","",$fline);
+			if(strlen(trim($fline))==0){
+				// skip blank line
 			}elseif(substr($fline,0,1)==" "){
-				$this->linebuffer .= substr($fline,1,-2);
+				$this->linebuffer .= $fline;
 			}else{
 				if(strlen($this->linebuffer)>0){
-					$this->currentline = $this->parse_content_line($this->linebuffer);
+					$result = $this->parse_content_line($this->linebuffer);
+					if(is_string($result)) return $result;
+					$this->currentline = $result;
 				}
-				$this->linebuffer = substr($fline,0,-2);
+				$this->linebuffer = $fline;
 				break;
 			}
 		}
@@ -1970,35 +2157,29 @@ class ICalendarParser {
 	private function parse_content_line($line){
 		$pos = 0;
 		$name = $this->parse_name($line,$pos);
-		if($name===FALSE) {
-			return FALSE;
-		}
+		if($name===FALSE) return "Expected property name";
 		$params = array();
 		while(TRUE){
 			$param = $this->parse_param($line,$pos);
-			if($param===FALSE) break;
+			if(is_string($param)) break;
 			$params[$param["name"]] = $param["value"];
 		}
 		$c = $this->expect($line,$pos,":",NULL);
-		if($c===FALSE){
-			return FALSE;
-		}
+		if($c===FALSE) return "Expected colon";
 		$values = $this->parse_values($line,$pos);
-		if($values===FALSE){
-			return FALSE;
-		}
+		if(is_string($values)) return $values;
 		return array("name"=>$name, "parameters"=>$params, "values"=>$values);
 	}
 	
 	private function parse_param($line,&$pos){
 		$c = $this->expect($line,$pos,";",NULL);
-		if($c===FALSE) return FALSE;
+		if($c===FALSE) return "Expected semicolon";
 		$name = $this->parse_name($line,$pos);
-		if($name===FALSE) return FALSE;
+		if($name===FALSE) return "Expected param name";
 		$c = $this->expect($line,$pos,"=",NULL);
-		if($c===FALSE) return FALSE;
+		if($c===FALSE) return "Expected equals";
 		$value = $this->parse_param_value($line,$pos);
-		if($value===FALSE) return FALSE;
+		if($value===FALSE) return "Expected param value";
 		return array("name"=>$name,"value"=>$value);
 	}
 	
@@ -2619,6 +2800,7 @@ $output_formats = array(
 	new HtmlFullOutput(),
 	new HtmlFragOutput(),
 	new JsonOutput(),
+	new JsonpOutput(),
 	new ICalendarOutput(),
 	new RssOutput(),
 	new XmlOutput()
@@ -2626,6 +2808,8 @@ $output_formats = array(
 
 $input_formats = array(
 	new RemoteICalendarInput(),
+	new RemoteJsonInput(),
+	new RemoteCsvInput(),
 	new LocalICalendarInput(),
 	new LocalJsonInput(),
 	new LocalCsvInput(),
