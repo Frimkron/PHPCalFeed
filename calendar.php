@@ -1,6 +1,6 @@
 <?php
 
-// TODO: createElement doesnt escape its damn contents
+// TODO: icalendar timezones
 // TODO: icalendar recurring events
 // TODO: fix html output layout for 6-week months
 // TODO: icalendar over-escaped files?
@@ -20,7 +20,7 @@
 // TODO: web-based UI for config
 // TODO: web-based UI input
 // TODO: other useful input formats
-// TODO: icalendar feed name and link?
+// TODO: icalendar feed name and link - see google example
 // TODO: icalendar prodid standard?
 // TODO: icalendar disallows zero events
 // TODO: responsive design for html
@@ -674,7 +674,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$eltitle = $doc->createElement("h2");
 				$eltitle->setAttribute("class","cal-title");
 					if(isset($data->url)){
-						$eltitlelink = $doc->createElement("a",$data->name);
+						$eltitlelink = $doc->createElement("a");
+						$txtitle = $doc->createTextNode($data->name);
+						$eltitlelink->appendChild($txtitle);
 						$eltitlelink->setAttribute("href",$data->url);
 						$eltitle->appendChild($eltitlelink);
 					}else{
@@ -685,7 +687,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 			}
 	
 			if(isset($data->description)){
-				$eldescription = $doc->createElement("p",$data->description);
+				$eldescription = $doc->createElement("p");
+				$txdescription = $doc->createElement($data->description);
+				$eldescription->appendChild($txdescription);
 				$eldescription->setAttribute("class","cal-description");
 				$elcontainer->appendChild($eldescription);
 			}
@@ -698,7 +702,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$monthname = $cal->get_month_name();
 				$yearname = $cal->get_year();
 			
-				$elcallink = $doc->createElement("a","$monthname $yearname");
+				$elcallink = $doc->createElement("a");
+				$txcallink = $doc->createTextNode("$monthname $yearname");
+				$elcallink->appendChild($txcallink);
 				$elcallink->setAttribute("class","cal-nav-link");
 				$elcallink->setAttribute("id","cal-$plusmonths-link");
 				$elcallink->setAttribute("href","#cal-calendar-$plusmonths");
@@ -779,7 +785,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcalendar->setAttribute("class","cal-calendar");
 				$elcalendar->setAttribute("id","cal-calendar-$plusmonths");
 				
-					$elcaption = $doc->createElement("caption", "$monthname $yearname");
+					$elcaption = $doc->createElement("caption");
+					$txcaption = $doc->createTextNode("$monthname $yearname");
+					$elcaption->appendChild($txcaption);
 					$elcalendar->appendChild($elcaption);
 				
 					$elthead = $doc->createElement("thead");
@@ -787,7 +795,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elrow = $doc->createElement("tr");
 						
 							foreach(array("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday") as $dayname){
-								$eldaytitle = $doc->createElement("th",$dayname);
+								$eldaytitle = $doc->createElement("th");
+								$txdaytitle = $doc->createTextNode($dayname);
+								$eldaytitle->appendChild($txdaytitle);
 								$eldaytitle->setAttribute("class","cal-day-title");
 								$elrow->appendChild($eldaytitle);
 							}
@@ -811,7 +821,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 									if($day["today"]) $cellclass .= " cal-today";
 									$elday->setAttribute("class",$cellclass);
 									
-										$eldate = $doc->createElement("div",$day["date"]);
+										$eldate = $doc->createElement("div");
+										$txdate = $doc->createTextNode($day["date"]);
+										$eldate->appendChild($txdate);
 										$eldate->setAttribute("class","cal-date");
 										$elday->appendChild($eldate);
 										
@@ -835,7 +847,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 														$ellabelwrapper = $elevent;
 													}
 													
-													$elevstart = $doc->createElement("abbr",$event["start"]);
+													$elevstart = $doc->createElement("abbr");
+													$txevstart = $doc->createTextNode($event["start"]);
+													$elevstart->appendChild($txevstart);
 													$elevstart->setAttribute("class","dtstart");
 													$elevstart->setAttribute("title",$event["startiso"]);
 													$ellabelwrapper->appendChild($elevstart);
@@ -843,7 +857,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 													$textevhyphen = $doc->createTextNode("-");
 													$ellabelwrapper->appendChild($textevhyphen);
 													
-													$elevend = $doc->createElement("abbr",$event["end"]);
+													$elevend = $doc->createElement("abbr");
+													$txevend = $doc->createTextNode($event["end"]);
+													$elevend->appendChild($txevend);
 													$elevend->setAttribute("class","dtend");
 													$elevend->setAttribute("title",$event["endiso"]);
 													$ellabelwrapper->appendChild($elevend);
@@ -851,7 +867,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 													$textevspace = $doc->createTextNode(" ");
 													$ellabelwrapper->appendChild($textevspace);
 													
-													$elevname = $doc->createElement("span",$event["name"]);
+													$elevname = $doc->createElement("span");
+													$txevname = $doc->createTextNode($event["name"]);
+													$elevname->appendChild($txevname);
 													$elevname->setAttribute("class","summary");
 													$ellabelwrapper->appendChild($elevname);
 													
@@ -873,7 +891,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 				
 			}
 			
-			$elprofilelink = $doc->createElement("a","hCalendar compatible");
+			$elprofilelink = $doc->createElement("a");
+			$txprofilelink = $doc->createTextNode("hCalendar compatible");
+			$elprofilelink->appendChild($txprofilelink);
 			$elprofilelink->setAttribute("rel","profile");
 			$elprofilelink->setAttribute("href","http://microformats.org/profile/hcalendar");
 			$elprofilelink->setAttribute("class","cal-hcal-link");
@@ -914,8 +934,9 @@ class HtmlFullOutput extends HtmlOutputBase {
 		$elhtml = $doc->createElement("html");
 			$elhead = $doc->createElement("head");
 	
-				$eltitle = $doc->createElement("title",
-					isset($data->name) ? $data->name : "Calendar");
+				$eltitle = $doc->createElement("title");
+				$txtitle = $doc->createTextNode(isset($data->name) ? $data->name : "Calendar");
+				$eltitle->appendChild($txtitle);
 				$elhead->appendChild($eltitle);
 	
 				$elcss = $doc->createElement("link");
@@ -1201,26 +1222,36 @@ class RssOutput extends OutputFormat {
 			$elchannel = $doc->createElement("channel");
 	
 				if(isset($data->name)){
-					$eltitle = $doc->createElement("title",$data->name);
+					$eltitle = $doc->createElement("title");
+					$txtitle = $doc->createTextNode($data->name);
+					$eltitle->appendChild($txtitle);
 					$elchannel->appendChild($eltitle);
 				}
 				if(isset($data->description)){
-					$eldescription = $doc->createElement("description",$data->description);
+					$eldescription = $doc->createElement("description");
+					$txdescription = $doc->createTextNode($data->description);
+					$eldescription->appendChild($txdescription);
 					$elchannel->appendChild($eldescription);
 				}
 				if(isset($data->url)){
-					$ellink = $doc->createElement("link",$data->url);
+					$ellink = $doc->createElement("link");
+					$txlink = $doc->createElement($data->url);
+					$ellink->appendChild($txlink);
 					$elchannel->appendChild($ellink);
 				}
 	
 				foreach($data->events as $item){
 					$elitem = $doc->createElement("item");
 	
-						$eltitle = $doc->createElement("title",$item->name);
+						$eltitle = $doc->createElement("title");
+						$txtitle = $doc->createTextNode($item->name);
+						$eltitle->appendChild($txtitle);
 						$elitem->appendChild($eltitle);
 	
 						if(isset($item->url)){
-							$ellink = $doc->createElement("link",$item->url);
+							$ellink = $doc->createElement("link");
+							$txlink = $doc->createTextNode($item->url);
+							$ellink->appendChild($txlink);
 							$elitem->appendChild($ellink);
 						}
 	
@@ -1230,7 +1261,9 @@ class RssOutput extends OutputFormat {
 						if(isset($item->description)){
 							$description .= "<p>".$item->description."</p>";
 						}
-						$eldescription = $doc->createElement("description",$description);
+						$eldescription = $doc->createElement("description");
+						$txdescription = $doc->createTextNode($description);
+						$eldescription->appendChild($txdescription);
 						$elitem->appendChild($eldescription);
 	
 					$elchannel->appendChild($elitem);
@@ -1297,15 +1330,21 @@ class XmlOutput extends OutputFormat {
 					"xsi:schemaLocation", $namespace." calendar.xsd");
 				
 				if(isset($data->name)){
-					$elname = $doc->createElement("name",$data->name);
+					$elname = $doc->createElement("name");
+					$txname = $doc->createTextNode($data->name);
+					$elname->appendChild($txname);
 					$elcalendar->appendChild($elname);
 				}
 				if(isset($data->description)){
-					$eldescription = $doc->createElement("description",$data->description);
+					$eldescription = $doc->createElement("description");
+					$txdescription = $doc->createTextNode($data->description);
+					$eldescription->appendChild($txdescription);
 					$elcalendar->appendChild($eldescription);
 				}
 				if(isset($data->url)){
-					$elurl = $doc->createElement("url",$data->url);
+					$elurl = $doc->createElement("url");
+					$txurl = $doc->createTextNode($data->url);
+					$elurl->appendChild($txurl);
 					$elcalendar->appendChild($elurl);
 				}
 				
@@ -1313,21 +1352,31 @@ class XmlOutput extends OutputFormat {
 				
 					$elevent = $doc->createElement("event");
 				
-						$elname = $doc->createElement("name",$item->name);
+						$elname = $doc->createElement("name");
+						$txname = $doc->createTextNode($item->name);
+						$elname->appendChild($txname);
 						$elevent->appendChild($elname);
 						
-						$elstarttime = $doc->createElement("start-time",date("c",$item->{"start-time"}));
+						$elstarttime = $doc->createElement("start-time");
+						$txstarttime = $doc->createTextNode(date("c",$item->{"start-time"}));
+						$elstarttime->appendChild($txstarttime);
 						$elevent->appendChild($elstarttime);
 						
-						$elendtime = $doc->createElement("end-time",date("c",$item->{"end-time"}));
+						$elendtime = $doc->createElement("end-time");
+						$txendtime = $doc->createTextNode(date("c",$item->{"end-time"}));
+						$elendtime->appendChild($txendtime);
 						$elevent->appendChild($elendtime);
 						
 						if(isset($item->description)){
-							$eldescription = $doc->createElement("description",$item->description);
+							$eldescription = $doc->createElement("description");
+							$txdescription = $doc->createTextNode($item->description);
+							$eldescription->appendChild($txdescription);
 							$elevent->appendChild($eldescription);
 						}
 						if(isset($item->url)){
-							$elurl = $doc->createElement("url",$item->url);
+							$elurl = $doc->createElement("url");
+							$txurl = $doc->createTextNode($item->url);
+							$elurl->appendChild($txurl);
 							$elevent->appendChild($elurl);
 						}
 				

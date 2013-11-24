@@ -1,6 +1,6 @@
 .cal-container { width: 95%; margin: 2em auto; padding: 0em; text-align: center; font-size: 10pt; 
 					color: rgb(64,64,64); font-family: verdana, tahoma, arial, sans-serif; position: relative; 
-					min-width: 48em; }
+					min-width: 45em; }
 .cal-title { font-size: 14pt; font-weight: bold; text-align: center; margin: 0.25em; padding: 0em; }
 .cal-title a, .cal-title a:visited { text-decoration: none; color: rgb(64,64,64); }
 .cal-title a:hover { text-decoration: underline; }
@@ -29,7 +29,7 @@
 #cal-calendar-2 caption { margin-left: auto; margin-right: 0px; }
 #cal-calendar-0 { clear: both; visibility: visible; z-index: 0; }
 #cal-calendar-1 {}
-#cal-calendar-2 { float: none; }
+#cal-calendar-2 {}
 .cal-month-title { display: block; position: relative; width: 200px; top: -32px; left: 0px; }
 .cal-day-title { width: 14%; text-weight: bold; font-size: 8pt; padding: 0.25em; vertical-align: bottom; height: 1.5em; }
 .cal-events { overflow: auto; max-height: 5em; }
@@ -41,5 +41,5 @@
 				margin-bottom: -2.25em; position: relative; }
 .col-nav-link:hover { color: rgb(0,200,200); }
 .cal-hcal-link { font-size: 7pt; display: block; width: 14em; margin: 1em 1em 0 auto; text-align: right; 
-				color: rgb(64,64,64); text-decoration: none; }
+				color: rgb(64,64,64); text-decoration: none; clear: both; }
 .cal-event abbr { text-decoration: none; border: none; }
