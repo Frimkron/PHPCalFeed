@@ -1,8 +1,6 @@
 <?php
 
-// TODO: icalendar timezones
 // TODO: icalendar recurring events
-// TODO: fix html output layout for 6-week months
 // TODO: icalendar over-escaped files?
 // TODO: update readme
 // TODO: facebook input
@@ -19,9 +17,9 @@
 // TODO: sql database input
 // TODO: web-based UI for config
 // TODO: web-based UI input
+// TODO: page-scraping input
 // TODO: other useful input formats
-// TODO: icalendar feed name and link - see google example
-// TODO: icalendar prodid standard?
+// TODO: icalendar proper timzone construction
 // TODO: icalendar disallows zero events
 // TODO: responsive design for html
 // TODO: more css examples
@@ -105,6 +103,12 @@ abstract class ICalendarInputBase extends InputFormat {
 		if(isset($cal["properties"]["calscale"]) 
 				&& strtolower($cal["properties"]["calscale"][0]["values"][0]) != "gregorian"){
 			return "ICalendar: Non-gregorian calendar not supported";
+		}
+		if(isset($cal["properties"]["x-wr-calname"])){
+			$calobj->name = $cal["properties"]["x-wr-calname"][0]["values"][0];
+		}
+		if(isset($cal["properties"]["x-wr-caldesc"])){
+			$calobj->description = $this->concat_prop_values($cal["properties"]["x-wr-caldesc"]);
 		}
 		if(isset($cal["components"]["VEVENT"])){
 			foreach($cal["components"]["VEVENT"] as $vevent){
@@ -211,9 +215,33 @@ abstract class ICalendarInputBase extends InputFormat {
 					trim($property["values"][0]), $matches)){
 				return "ICalendar: Invalid date-time ".$property["values"][0];
 			}
-			$isutc = sizeof($matches)>=7 && $matches[6]=="Z"; //TODO - convert timezone
-			return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], 
-						"hour"=>$matches[4], "minute"=>$matches[5] );
+			$year = $matches[1];
+			$month = $matches[2];
+			$day = $matches[3];
+			$hour = $matches[4];
+			$minute = $matches[5];			
+			$isutc = sizeof($matches)>=7 && $matches[6]=="Z";
+			if($isutc){
+				$timezone = new DateTimeZone("UTC");		
+			}elseif(isset($property["parameters"]["tzid"])){
+				$tzid = $property["parameters"]["tzid"];				
+				try {
+					$timezone = new DateTimeZone($tzid);
+				}catch(Exception $e){
+					return "ICalendar: timezone '$tzid' unknown and timezone construction not implemented";
+				}
+			}else{
+				$newdate = new DateTime();
+				$timezone = $newdate->getTimezone();
+			}	
+			$cal = new DateTime("$year-$month-$day $hour:$minute", $timezone);
+			$cal = new DateTime("@".$cal->getTimestamp());
+			$year = $cal->format("Y");
+			$month = $cal->format("n");
+			$day = $cal->format("j");
+			$hour = $cal->format("G");
+			$minute = $cal->format("i");			
+			return array( "year"=>$year, "month"=>$month, "day"=>$day, "hour"=>$hour, "minute"=>$minute );
 		}
 	}
 	
@@ -261,7 +289,6 @@ class LocalICalendarInput extends ICalendarInputBase {
 			return "ICalendar: File '$filename' not found";
 		}
 		$data = $this->feed_to_event_data($handle);
-		if(is_string($data)) return "ICalendar: $data";
 		fclose($handle);
 		return $data;
 	}
@@ -279,7 +306,10 @@ class RemoteICalendarInput extends ICalendarInputBase {
 	
 	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!isset($config["url"])) return FALSE;
-		if(strtolower(substr($config["url"],-4,4)) != ".ics") return FALSE;
+		if(strtolower(substr($config["url"],-4,4)) != ".ics"
+				&& strtolower(substr($config["url"],-5,5))  != ".ical"
+				&& strtolower(substr($config["url"],-10,10)) != ".icalendar")
+			return FALSE;
 		$result = write_config($scriptname,array("format"=>"icalendar-remote","url"=>$config["url"]));
 		if($result) return $result;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
@@ -688,7 +718,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 	
 			if(isset($data->description)){
 				$eldescription = $doc->createElement("p");
-				$txdescription = $doc->createElement($data->description);
+				$txdescription = $doc->createTextNode($data->description);
 				$eldescription->appendChild($txdescription);
 				$eldescription->setAttribute("class","cal-description");
 				$elcontainer->appendChild($eldescription);
@@ -1158,6 +1188,15 @@ class ICalendarOutput extends OutputFormat {
 		}
 		fwrite($handle,"BEGIN:VCALENDAR\r\n");
 		fwrite($handle,"VERSION:2.0\r\n");
+		fwrite($handle,"PRODID:-//Mark Frimston//Calendar Script//EN\r\n");
+		fwrite($handle,"CALSCALE:GREGORIAN\r\n");
+		fwrite($handle,"METHOD:PUBLISH\r\n");
+		if(isset($data->name)){
+			fwrite($handle,$this->wrap("X-WR-CALNAME:".$this->escape_value($data->name))."\r\n");
+		}
+		if(isset($data->description)){
+			fwrite($handle,$this->wrap("X-WR-CALDESC:".$this->escape_value($data->description))."\r\n");
+		}
 		foreach($data->events as $item){
 			fwrite($handle,"BEGIN:VEVENT\r\n");
 			fwrite($handle,"DTSTART:".gmdate("Ymd\THis\Z",$item->{"start-time"})."\r\n");

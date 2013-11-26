@@ -41,5 +41,5 @@
 				margin-bottom: -2.25em; position: relative; }
 .col-nav-link:hover { color: rgb(0,200,200); }
 .cal-hcal-link { font-size: 7pt; display: block; width: 14em; margin: 1em 1em 0 auto; text-align: right; 
-				color: rgb(64,64,64); text-decoration: none; clear: both; }
+				color: rgb(64,64,64); text-decoration: none; clear: both; padding: 1em 0 0 0; }
 .cal-event abbr { text-decoration: none; border: none; }
