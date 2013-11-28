@@ -1,5 +1,9 @@
 <?php
 
+// TODO: icalendar property values are not always comma-separated e.g. RRULE
+//		move date parsing to core parser
+//		move duration parsing to core parser
+//		implement recurrence parsing in core parser
 // TODO: icalendar recurring events
 // TODO: icalendar over-escaped files?
 // TODO: update readme
@@ -255,6 +259,16 @@ abstract class ICalendarInputBase extends InputFormat {
 		$hours = sizeof($matches)>=4 && $matches[3]!="" ? $matches[3] : 0;
 		$minutes = sizeof($matches)>=5 && $matches[4]!="" ? $matches[4] : 0;
 		return array( "days"=>$weeks*7+$days, "hours"=>$hours, "minutes"=>$minutes );
+	}
+	
+	private function extract_recurrence($starttime,$rrules,$rdates,$exrules,$exdates){
+		if(sizeof($rrules)>1) return "ICalendar: Multiple RRULEs not supported";
+		if(sizeof($rdates)>0) return "ICalendar: RDATE not supported";
+		if(sizeof($exrules)>0) return "ICalendar: EXRULE not supported";
+		if(sizeof($exdates)>0) return "ICalendar: EXDATE not supported";
+		$matches = array();
+		// TODO
+		//if(!preg_match("",trim($rrules[0]
 	}
 } 
 
@@ -2160,6 +2174,67 @@ class RecurrenceParser {
 
 class ICalendarParser {
 
+	private $PROP_TYPES = array(
+		"calscale"			=>	"text",
+		"method"			=>	"text",
+		"prodid"			=>	"text",
+		"version"			=>	"text",
+		
+		"begin"				=>	"raw",
+		"end"				=>	"raw",
+	
+		"attach"			=>	"uri",
+		"categories"		=>	"text",
+		"class"				=>	"text",
+		"comment"			=>	"text",
+		"description"		=>	"text",
+		"geo"				=>	"raw",
+		"location"			=>	"text",
+		"percent-complete"	=>	"integer",
+		"priority"			=>	"integer",
+		"resources"			=>	"text",
+		"status"			=>	"text",
+		"summary"			=>	"text",
+		
+		"completed"			=>	"date-time",
+		"dtend"				=>	"date-time",
+		"due"				=>	"date-time",
+		"dtstart"			=>	"date-time",
+		"duration"			=>	"duration",
+		"freebusy"			=>	"period",
+		"transp"			=>	"text",
+		
+		"tzid"				=>	"text",
+		"tzname"			=>	"text",
+		"tzoffsetfrom"		=>	"utc-offset",
+		"tzoffsetto"		=>	"utc-offset",
+		"tzurl"				=>	"uri",
+		
+		"attendee"			=>	"cal-address",
+		"contact"			=>	"text",
+		"organizer"			=>	"cal-address",
+		"recurrence-id"		=>	"date-time",
+		"related-to"		=>	"text",
+		"url"				=>	"uri",
+		"uid"				=>	"text",
+		
+		"exdate"			=>	"date-time",
+		"exrule"			=>	"recur",
+		"rdate"				=>	"date-time",
+		"rrule"				=>	"recur",
+		
+		"action"			=>	"text",
+		"repeat"			=>	"integer",
+		"trigger"			=>	"duration",
+		
+		"created"			=>	"date-time",
+		"dtstamp"			=>	"date-time",
+		"last-modified"		=>	"date-time",
+		"sequence"			=>	"integer",
+		
+		"request-status"	=>	"text"
+	);
+
 	private $filehandle;
 	private $currentline;
 	private $linebuffer = "";
@@ -2180,7 +2255,7 @@ class ICalendarParser {
 		if($this->currentline===FALSE || $this->currentline["name"] != "begin"){
 			return "Expected BEGIN property";
 		}
-		$name = $this->currentline["values"][0];
+		$name = $this->currentline["value"];
 		$props = array();
 		$comps = array();
 		$result = $this->next_content_line();
@@ -2193,8 +2268,8 @@ class ICalendarParser {
 				if(!isset($comps[$result["name"]])) $comps[$result["name"]] = array();
 				array_push($comps[$result["name"]],$result);
 			}elseif($this->currentline["name"]=="end"){
-				if($this->currentline["values"][0]!=$name){
-					return "Unexpected end of ".$this->currentline["values"][0]." component";
+				if($this->currentline["value"]!=$name){
+					return "Unexpected end of ".$this->currentline["value"]." component";
 				}
 				$result = $this->next_content_line();
 				if(is_string($result)) return $result;
@@ -2254,9 +2329,36 @@ class ICalendarParser {
 		}
 		$c = $this->expect($line,$pos,":",NULL);
 		if($c===FALSE) return "Expected colon";
-		$values = $this->parse_values($line,$pos);
-		if(is_string($values)) return $values;
-		return array("name"=>$name, "parameters"=>$params, "values"=>$values);
+		if(!isset($this->PROP_TYPES[$name]) && substr($name,0,2)!="x-"){
+			return "Unknown property '$name'";
+		}
+		if(isset($params["value"])){
+			$type = strtolower($params["value"]);
+		}elseif(isset($this->PROP_TYPES[$name])){
+			$type = $this->PROP_TYPES[$name];
+		}else{
+			$type = "text";
+		}
+		switch($type){
+			case "text":		$value = $this->parse_texts($line,$pos); 		break;
+			case "boolean":		$value = $this->parse_boolean($line,$pos); 		break;
+			case "date":		$value = $this->parse_dates($line,$pos);		break;
+			case "date-time":	$value = $this->parse_datetimes($line,$pos);	break;
+			case "duration":	$value = $this->parse_durations($line,$pos);	break;
+			case "integer":
+			case "float":		$value = $this->parse_numbers($line,$pos);		break;
+			case "period":		$value = $this->parse_periods($line,$pos);		break;
+			case "recur":		$value = $this->parse_recurs($line,$pos);		break;
+			case "time":		$value = $this->parse_times($line,$pos);		break;
+			case "utc-offset":	$value = $this->parse_utc_offset($line,$pos);	break;
+			case "raw":
+			case "binary":
+			case "cal-address":
+			case "uri":			$value = $this->parse_raw($line,$pos); 			break;
+			default:			return "Unknown type '$type'";
+		}
+		if($value===FALSE) return "Invalid $type value";
+		return array("name"=>$name, "parameters"=>$params, "value"=>$value);
 	}
 	
 	private function parse_param($line,&$pos){
@@ -2297,7 +2399,18 @@ class ICalendarParser {
 		return $buffer;
 	}
 	
-	private function parse_values($line,&$pos){
+	private function parse_raw($line,&$pos){
+		$buffer = "";
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE) break;
+			$buffer .= $curr;
+			$this->next_char($line,$pos);
+		}
+		return $buffer;
+	}
+	
+	private function parse_texts($line,&$pos){
 		$vals = array();
 		$buffer = "";
 		$escape = FALSE;
@@ -2325,6 +2438,62 @@ class ICalendarParser {
 		}
 		array_push($vals,$buffer);
 		return $vals;
+	}
+	
+	private function parse_boolean($line,&$pos){
+		if($this->current_char($line,$pos) == "T"){
+			foreach(array("T","R","U","E") as $c){
+				$result = $this->expect($line,$pos,$c,NULL);
+				if($result===FALSE) return $result;
+			}
+			return 1;
+		}else{
+			foreach(array("F","A","L","S","E") as $c){
+				$result = $this->expect($line,$pos,$c,NULL);
+				if($result===FALSE) return $result;
+			}
+			return 0;
+		}
+	}
+	
+	private function parse_dates($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_datetimes($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_times($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_durations($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_numbers($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_periods($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_recurs($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_utc_offset($line,&$pos){
+		// TODO
+		return $this->parse_raw($line,$pos);
 	}
 	
 	private function parse_name($line,&$pos){
@@ -2904,10 +3073,10 @@ $input_formats = array(
 	new NoInput()
 );
 
-$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
+/*$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
-}
+}*/
