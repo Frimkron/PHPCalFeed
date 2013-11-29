@@ -2358,6 +2358,12 @@ class ICalendarParser {
 			default:			return "Unknown type '$type'";
 		}
 		if($value===FALSE) return "Invalid $type value";
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || strpos(" \t",$curr)===FALSE) break;
+			$this->next_char($line,$pos);
+		}
+		if($this->current_char($line,$pos)!==FALSE) return "Expected end of property value";
 		return array("name"=>$name, "parameters"=>$params, "value"=>$value);
 	}
 	
@@ -2457,18 +2463,122 @@ class ICalendarParser {
 	}
 	
 	private function parse_dates($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_date($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_date($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_date($line,&$pos){
+		$numchars = "0123456789";
+		$buffer = "";
+		for($i=0;$i<4;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$year = (int)$buffer;
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$month = (int)$buffer;
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$day = (int)$buffer;
+		return array("year"=>$year, "month"=>$month, "day"=>$day);
 	}
 	
 	private function parse_datetimes($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_datetime($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_datetime($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_datetime($line,&$pos){
+		$date = $this->parse_date($line,$pos);
+		if($date===FALSE) return FALSE;
+		$c = $this->expect($line,$pos,"T",NULL);
+		if($c===FALSE) return FALSE;
+		$time = $this->parse_time($line,$pos);
+		if($time===FALSE) return FALSE;
+		return array("year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
+			"hour"=>$time["hour"], "minute"=>$time["minute"], "second"=>$time["second"],
+			"isutc"=>$time["isutc"]);
 	}
 	
 	private function parse_times($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_time($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_time($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_time($line,&$pos){
+		$numchars = "0123456789";
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$hour = (int)$buffer;
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$minute = (int)$buffer;
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$second = (int)$buffer;
+		$buffer = "";
+		$isutc = FALSE;
+		$curr = $this->current_char($line,$pos);
+		if($curr!==FALSE && $curr=="Z"){
+			$isutc = TRUE;
+			$this->next_char($line,$pos);
+		}
+		return array("hour"=>$hour, "minute"=>$minute, "second"=>$second, "isutc"=>$isutc);
 	}
 	
 	private function parse_durations($line,&$pos){
@@ -2476,9 +2586,62 @@ class ICalendarParser {
 		return $this->parse_raw($line,$pos);
 	}
 	
-	private function parse_numbers($line,&$pos){
+	private function parse_duration($line,&$pos){
 		// TODO
 		return $this->parse_raw($line,$pos);
+	}
+	
+	private function parse_numbers($line,&$pos){
+		$values = array();
+		$val = $this->parse_number($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_number($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_number($line,&$pos){
+		$numchars = "0123456789";
+		$buffer = "";
+		$curr = $this->current_char($line,$pos);
+		if($curr=="+" || $curr=="-"){
+			$buffer .= $curr;
+			$this->next_char($line,$pos);
+		}
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$buffer .= $val;
+		$curr = $this->current_char($line,$pos);
+		if($curr!==FALSE && $curr=="."){
+			$buffer .= $curr;
+			$this->next_char($line,$pos);
+			$val = $this->parse_digits($line,$pos);
+			if($val===FALSE) return FALSE;
+			$buffer .= $val;
+		}
+		return (float)$buffer;
+	}
+	
+	private function parse_digits($line,&$pos){
+		$numchars = "0123456789";
+		$buffer = "";
+		$c = $this->expect($line,$pos,$numchars,NULL);
+		if($c===FALSE) return FALSE;
+		$buffer .= $c;
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || strpos($numchars,$curr)===FALSE) break;
+			$buffer .= $curr;
+			$this->next_char($line,$pos);
+		}
+		return $buffer;
 	}
 	
 	private function parse_periods($line,&$pos){
@@ -2492,8 +2655,38 @@ class ICalendarParser {
 	}
 	
 	private function parse_utc_offset($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$numchars = "0123456789";
+		$buffer = "";
+		$c = $this->expect($line,$pos,"+-",NULL);
+		if($c===FALSE) return FALSE;
+		$positive = $c=="+";
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$hour = (int)$buffer;
+		$buffer = "";
+		for($i=0;$i<2;$i++){
+			$c = $this->expect($line,$pos,$numchars,NULL);
+			if($c===FALSE) return FALSE;
+			$buffer .= $c;
+		}
+		$minute = (int)$buffer;
+		$buffer = "";
+		$curr = $this->current_char($line,$pos);
+		if($curr!==FALSE && strpos($numchars,$curr)!==FALSE){
+			for($i=0;$i<2;$i++){
+				$c = $this->expect($line,$pos,$numchars,NULL);
+				if($c===FALSE) return FALSE;
+				$buffer .= $c;
+			}
+			$second = (int)$buffer;
+		}else{
+			$second = 0;
+		}
+		return array("positive"=>$positive, "hour"=>$hour, "minute"=>$minute, "second"=>$second);
 	}
 	
 	private function parse_name($line,&$pos){
