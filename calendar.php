@@ -2582,13 +2582,105 @@ class ICalendarParser {
 	}
 	
 	private function parse_durations($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_duration($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_duration($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
 	}
 	
 	private function parse_duration($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$numchars = "0123456789";
+		$buffer = "";
+		$positive = TRUE;
+		$weeks = 0;
+		$days = 0;
+		$hours = 0;
+		$minutes = 0;
+		$seconds = 0;
+		
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		if($curr=="+"){
+			$positive = TRUE;
+			$this->next_char($line,$pos);
+		}elseif($curr=="-"){
+			$positive = FALSE;
+			$this->next_char($line,$pos);
+		}
+		
+		$c = $this->expect($line,$pos,"P",NULL);
+		if($c===FALSE) return FALSE;
+		
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		if(strpos($numchars,$curr)===FALSE) goto t_check;
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$curr = $this->current_char($line,$pos);
+		
+		w_check:
+		if($curr===FALSE || $curr!="W") goto d_check;
+		$weeks  = (int)$val;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE || strpos($numchars,$curr)===FALSE) goto t_check;		
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$curr = $this->current_char($line,$pos);
+		
+		d_check:		
+		if($curr===FALSE || $curr!="D") return FALSE;
+		$days = (int)$val;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+		
+		t_check:
+		if($curr===FALSE || $curr!="T") goto end;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$curr = $this->current_Char($line,$pos);
+		
+		h_check:
+		if($curr===FALSE || $curr!="H") goto m_check;
+		$hours = (int)$val;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE || strpos($numchars,$curr)===FALSE) goto end;
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$curr = $this->current_char($line,$pos);
+		
+		m_check:
+		if($curr===FALSE || $curr!="M") goto s_check;
+		$minutes = (int)$val;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE || strpos($numchars,$curr)===FALSE) goto end;
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		$curr = $this->current_char($line,$pos);
+		
+		s_check:
+		if($curr===FALSE || $curr!="S") return FALSE;
+		$seconds = (int)$val;
+		$this->next_char($line,$pos);
+		$curr = $this->current_char($line,$pos);
+
+		end:
+		return array( "positive"=>$positive, "weeks"=>$weeks, "days"=>$days, 
+						"hours"=>$hours, "minutes"=>$minutes, "seconds"=>$seconds );
 	}
 	
 	private function parse_numbers($line,&$pos){
@@ -2645,8 +2737,39 @@ class ICalendarParser {
 	}
 	
 	private function parse_periods($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_period($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_period($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_period($line,&$pos){
+		$val = $this->parse_datetime($line,$pos);
+		if($val===FALSE) return FALSE;
+		$start = $val;
+		$c = $this->expect($line,$pos,"/",NULL);
+		if($c===FALSE) return FALSE;
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		if($curr=="+" || $curr=="-" || $curr=="P"){
+			$val = $this->parse_duration($line,$pos);
+			if($val===FALSE) return FALSE;
+			return array( "start"=>$start, "duration"=>$val );
+		}else{
+			$val = $this->parse_datetime($line,$pos);
+			if($val===FALSE) return FALSE;
+			return array( "start"=>$start, "end"=>$val );
+		}
+		return array();
 	}
 	
 	private function parse_recurs($line,&$pos){
