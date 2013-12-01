@@ -1,17 +1,23 @@
 <?php
 
-// TODO: icalendar property values are not always comma-separated e.g. RRULE
-//		implement recurrence parsing in core parser
 // TODO: icalendar recurring events
 // TODO: json output is broken
-// TODO: icalendar over-escaped files?
+// TODO: expiration timestamp should be start of day
 // TODO: update readme
+// TODO: test output in different timezone
 // TODO: facebook input
 //		feasible using oath?
+//		can user create application token and generate user token for it
+//			prompt for calendar login
+//			prompt for facebook login
+//			scrape facebook to create app token
+//			store app token
+//			generate user token
 // TODO: wordpress api
 //		most common use case?
 // TODO: eventbrite input
 //		api requires oauth?
+//		can user create application token and generate user token for it
 // TODO: yaml input
 // TODO: yaml output
 // TODO: atom output
@@ -21,11 +27,9 @@
 // TODO: web-based UI for config
 // TODO: web-based UI input
 // TODO: page-scraping input
-// TODO: other useful input formats
-// TODO: icalendar proper timzone construction
+// TODO: icalendar proper timezone construction
 // TODO: icalendar disallows zero events
 // TODO: responsive design for html
-// TODO: more css examples
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
 
@@ -104,14 +108,17 @@ abstract class ICalendarInputBase extends InputFormat {
 			return "ICalendar: Expected VCALENDAR component but found".$cal["name"];
 		}
 		if(isset($cal["properties"]["calscale"]) 
-				&& strtolower($cal["properties"]["calscale"][0]["values"][0]) != "gregorian"){
+				&& strtolower($cal["properties"]["calscale"][0]["value"][0]) != "gregorian"){
 			return "ICalendar: Non-gregorian calendar not supported";
 		}
 		if(isset($cal["properties"]["x-wr-calname"])){
-			$calobj->name = $cal["properties"]["x-wr-calname"][0]["values"][0];
+			$calobj->name = $cal["properties"]["x-wr-calname"][0]["value"][0];
 		}
 		if(isset($cal["properties"]["x-wr-caldesc"])){
 			$calobj->description = $this->concat_prop_values($cal["properties"]["x-wr-caldesc"]);
+		}
+		if(isset($cal["properties"]["x-original-url"])){
+			$calobj->url = $cal["properties"]["x-original-url"][0]["value"][0];
 		}
 		if(isset($cal["components"]["VEVENT"])){
 			foreach($cal["components"]["VEVENT"] as $vevent){
@@ -124,12 +131,12 @@ abstract class ICalendarInputBase extends InputFormat {
 				}
 				
 				if(isset($vevent["properties"]["description"]) 
-						&& strlen($vevent["properties"]["description"][0]["values"][0])>0){
+						&& strlen($vevent["properties"]["description"][0]["value"][0])>0){
 					$eventobj->description = $this->concat_prop_values($vevent["properties"]["description"]);
 				}
 				
 				if(isset($vevent["properties"]["url"])){
-					$eventobj->url = $vevent["properties"]["url"][0]["values"][0];
+					$eventobj->url = $vevent["properties"]["url"][0]["value"];
 				}			
 				
 				if(isset($vevent["properties"]["rrule"])){
@@ -140,7 +147,7 @@ abstract class ICalendarInputBase extends InputFormat {
 					if(!isset($vevent["properties"]["dtstart"])){
 						continue; // ignore if no start time
 					}
-					$starttime = $this->extract_datetime($vevent["properties"]["dtstart"][0]);
+					$starttime = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
 					if(is_string($starttime)) return $starttime;
 					$eventobj->year = $starttime["year"];
 					$eventobj->month = $starttime["month"];
@@ -151,7 +158,7 @@ abstract class ICalendarInputBase extends InputFormat {
 				
 				if(isset($vevent["properties"]["duration"])){
 					// duration specified
-					$duration = $this->extract_duration($vevent["properties"]["duration"][0]);
+					$duration = $this->convert_duration($vevent["properties"]["duration"][0]);
 					if(is_string($duration)) return $duration;
 					$eventobj->duration = $duration;
 					
@@ -159,12 +166,12 @@ abstract class ICalendarInputBase extends InputFormat {
 					$dtstart = $vevent["properties"]["dtstart"][0];
 					if(isset($vevent["properties"]["dtend"])){
 						// start and end specified
-						$starttime = $this->extract_datetime($dtstart);
+						$starttime = $this->convert_datetime($dtstart);
 						if(is_string($starttime)) return $starttime;
 						$startcal = new DateTime();
 						$startcal->setDate($starttime["year"],$starttime["month"],$starttime["day"]);
 						$startcal->setTime($starttime["hour"],$starttime["minute"]);
-						$endtime = $this->extract_datetime($vevent["properties"]["dtend"][0]);
+						$endtime = $this->convert_datetime($vevent["properties"]["dtend"][0]);
 						if(is_string($endtime)) return $endtime;
 						$endcal = new DateTime();
 						$endcal->setDate($endtime["year"],$endtime["month"],$endtime["day"]);
@@ -196,35 +203,23 @@ abstract class ICalendarInputBase extends InputFormat {
 	private function concat_prop_values($properties){
 		$result = "";
 		foreach($properties as $prop){
-			foreach($prop["values"] as $value){
+			foreach($prop["value"] as $value){
 				$result .= $value;
 			}
 		}
 		return $result;
 	}
 
-	private function extract_datetime($property){
+	private function convert_datetime($property){
 		if(isset($property["parameters"]["value"]) && strtolower($property["parameters"]["value"])=="date"){
 			# date only
-			$matches = array();
-			if(!preg_match("/^(\d{4})(\d{2})(\d{2})$/", trim($property["values"][0]), $matches)){
-				return "ICalendar: Invalid date ".$property["values"][0];
-			}
-			return array( "year"=>$matches[1], "month"=>$matches[2], "day"=>$matches[3], "hour"=>0, "minute"=>0 );
+			$date = $property["value"][0];
+			return array( "year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
+					"hour"=>0, "minute"=>0 );
 		}else{
 			# date and time
-			$matches = array();
-			if(!preg_match("/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}(Z)?$/",
-					trim($property["values"][0]), $matches)){
-				return "ICalendar: Invalid date-time ".$property["values"][0];
-			}
-			$year = $matches[1];
-			$month = $matches[2];
-			$day = $matches[3];
-			$hour = $matches[4];
-			$minute = $matches[5];			
-			$isutc = sizeof($matches)>=7 && $matches[6]=="Z";
-			if($isutc){
+			$datetime = $property["value"][0];
+			if($datetime["isutc"]){
 				$timezone = new DateTimeZone("UTC");		
 			}elseif(isset($property["parameters"]["tzid"])){
 				$tzid = $property["parameters"]["tzid"];				
@@ -237,37 +232,18 @@ abstract class ICalendarInputBase extends InputFormat {
 				$newdate = new DateTime();
 				$timezone = $newdate->getTimezone();
 			}	
-			$cal = new DateTime("$year-$month-$day $hour:$minute", $timezone);
+			$cal = new DateTime($datetime["year"]."-".$datetime["month"]."-".$datetime["day"]
+					." ".$datetime["hour"].":".$datetime["minute"], $timezone);
 			$cal = new DateTime("@".$cal->getTimestamp());
-			$year = $cal->format("Y");
-			$month = $cal->format("n");
-			$day = $cal->format("j");
-			$hour = $cal->format("G");
-			$minute = $cal->format("i");			
-			return array( "year"=>$year, "month"=>$month, "day"=>$day, "hour"=>$hour, "minute"=>$minute );
+			return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), 
+				"day"=>$cal->format("j"), "hour"=>$cal->format("G"), "minute"=>$cal->format("i") );
 		}
 	}
 	
-	private function extract_duration($property){
-		$matches = array();
-		if(!preg_match("/^[+-]?P(\d+W)?(\d+D)?(?:T(\d+H)?(\d+M)?(\d+S)?)?$/",trim($property["values"][0]), $matches)){
-			return "ICalendar: Invalid duration ".$property["values"][0];
-		}
-		$weeks = sizeof($matches)>=2 && $matches[1]!="" ? $matches[1] : 0;
-		$days = sizeof($matches)>=3 && $matches[2]!="" ? $matches[2] : 0;
-		$hours = sizeof($matches)>=4 && $matches[3]!="" ? $matches[3] : 0;
-		$minutes = sizeof($matches)>=5 && $matches[4]!="" ? $matches[4] : 0;
-		return array( "days"=>$weeks*7+$days, "hours"=>$hours, "minutes"=>$minutes );
-	}
-	
-	private function extract_recurrence($starttime,$rrules,$rdates,$exrules,$exdates){
-		if(sizeof($rrules)>1) return "ICalendar: Multiple RRULEs not supported";
-		if(sizeof($rdates)>0) return "ICalendar: RDATE not supported";
-		if(sizeof($exrules)>0) return "ICalendar: EXRULE not supported";
-		if(sizeof($exdates)>0) return "ICalendar: EXDATE not supported";
-		$matches = array();
-		// TODO
-		//if(!preg_match("",trim($rrules[0]
+	private function convert_duration($property){
+		$dur = $property["value"][0];
+		return array( "days"=>$dur["weeks"]*7+$dur["days"], 
+			"hours"=>$dur["hours"], "minutes"=>$dur["minutes"] );
 	}
 } 
 
@@ -1186,10 +1162,17 @@ class ICalendarOutput extends OutputFormat {
 		return preg_replace("/[^\n\r]{75}/","$0\r\n ",$text);
 	}
 	
-	private function escape_value($text){
+	private function escape_text($text){
 		return str_replace(
-			array("\n", "\r", "\\",  ","  ),
-			array("\\n","\\r","\\\\","\\,"),
+			array("\n", "\r", "\\",  ",",  ";"  ),
+			array("\\n","\\r","\\\\","\\,","\\;"),
+			$text);
+	}
+	
+	private function escape_url($text){
+		return str_replace(
+			array("\n", "\r"),
+			array("","",),
 			$text);
 	}
 	
@@ -1205,21 +1188,24 @@ class ICalendarOutput extends OutputFormat {
 		fwrite($handle,"CALSCALE:GREGORIAN\r\n");
 		fwrite($handle,"METHOD:PUBLISH\r\n");
 		if(isset($data->name)){
-			fwrite($handle,$this->wrap("X-WR-CALNAME:".$this->escape_value($data->name))."\r\n");
+			fwrite($handle,$this->wrap("X-WR-CALNAME:".$this->escape_text($data->name))."\r\n");
 		}
 		if(isset($data->description)){
-			fwrite($handle,$this->wrap("X-WR-CALDESC:".$this->escape_value($data->description))."\r\n");
+			fwrite($handle,$this->wrap("X-WR-CALDESC:".$this->escape_text($data->description))."\r\n");
+		}
+		if(isset($data->url)){
+			fwrite($handle,$this->wrap("X-ORIGINAL-URL:".$this->escape_url($data->url))."\r\n");
 		}
 		foreach($data->events as $item){
 			fwrite($handle,"BEGIN:VEVENT\r\n");
 			fwrite($handle,"DTSTART:".gmdate("Ymd\THis\Z",$item->{"start-time"})."\r\n");
 			fwrite($handle,"DTEND:".gmdate("Ymd\THis\Z",$item->{"end-time"})."\r\n");
-			fwrite($handle,$this->wrap("SUMMARY:".$this->escape_value($item->name))."\r\n");
+			fwrite($handle,$this->wrap("SUMMARY:".$this->escape_text($item->name))."\r\n");
 			if(isset($item->description)){
-				fwrite($handle,$this->wrap("DESCRIPTION:".$this->escape_value($item->description))."\r\n");
+				fwrite($handle,$this->wrap("DESCRIPTION:".$this->escape_text($item->description))."\r\n");
 			}
 			if(isset($item->url)){
-				fwrite($handle,$this->wrap("URL:".$this->escape_value($item->url))."\r\n");
+				fwrite($handle,$this->wrap("URL:".$this->escape_url($item->url))."\r\n");
 			}
 			fwrite($handle,"END:VEVENT\r\n");
 		}
@@ -1287,7 +1273,7 @@ class RssOutput extends OutputFormat {
 				}
 				if(isset($data->url)){
 					$ellink = $doc->createElement("link");
-					$txlink = $doc->createElement($data->url);
+					$txlink = $doc->createTextNode($data->url);
 					$ellink->appendChild($txlink);
 					$elchannel->appendChild($ellink);
 				}
@@ -2305,7 +2291,7 @@ class ICalendarParser {
 			if(strlen(trim($fline))==0){
 				// skip blank line
 			}elseif(substr($fline,0,1)==" "){
-				$this->linebuffer .= $fline;
+				$this->linebuffer .= substr($fline,1);
 			}else{
 				if(strlen($this->linebuffer)>0){
 					$result = $this->parse_content_line($this->linebuffer);
@@ -2614,8 +2600,8 @@ class ICalendarParser {
 	}
 	
 	private function parse_duration($line,&$pos){
-		$numchars = "0123456789";
-		$buffer = "";
+		$numchars = '0123456789';
+		$buffer = '-\n"\n-\n~\n-\n3\n-\n^\n-\n~\n0\n-\n/\n-';
 		$positive = TRUE;
 		$weeks = 0;
 		$days = 0;
@@ -3569,10 +3555,10 @@ $input_formats = array(
 	new NoInput()
 );
 
-/*$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
+$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
-}*/
+}
