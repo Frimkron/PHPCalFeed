@@ -1,8 +1,6 @@
 <?php
 
 // TODO: icalendar property values are not always comma-separated e.g. RRULE
-//		move date parsing to core parser
-//		move duration parsing to core parser
 //		implement recurrence parsing in core parser
 // TODO: icalendar recurring events
 // TODO: json output is broken
@@ -2238,6 +2236,7 @@ class ICalendarParser {
 
 	private $filehandle;
 	private $currentline;
+	private $currentlinenum = -1;
 	private $linebuffer = "";
 
 	public function parse($filehandle){
@@ -2248,13 +2247,13 @@ class ICalendarParser {
 		}
 		$result = $this->parse_component();
 		if(is_string($result)) return $result;
-		if($this->currentline !== FALSE) return "Expected end of file";
+		if($this->currentline !== FALSE) return $this->error("Expected end of file");
 		return $result;
 	}
 	
 	private function parse_component(){
 		if($this->currentline===FALSE || $this->currentline["name"] != "begin"){
-			return "Expected BEGIN property";
+			return $this->error("Expected BEGIN property");
 		}
 		$name = $this->currentline["value"];
 		$props = array();
@@ -2262,7 +2261,7 @@ class ICalendarParser {
 		$result = $this->next_content_line();
 		if(is_string($result)) return $result;
 		while(TRUE){
-			if($this->currentline === FALSE) return "Unexpected end of file";
+			if($this->currentline === FALSE) return $this->error("Unexpected end of file");
 			if($this->currentline["name"]=="begin"){
 				$result = $this->parse_component();
 				if(is_string($result)) return $result;	
@@ -2270,7 +2269,7 @@ class ICalendarParser {
 				array_push($comps[$result["name"]],$result);
 			}elseif($this->currentline["name"]=="end"){
 				if($this->currentline["value"]!=$name){
-					return "Unexpected end of ".$this->currentline["value"]." component";
+					return $this->error("Unexpected end of ".$this->currentline["value"]." component");
 				}
 				$result = $this->next_content_line();
 				if(is_string($result)) return $result;
@@ -2292,6 +2291,7 @@ class ICalendarParser {
 		}
 		while(TRUE){
 			$fline = fgets($this->filehandle);
+			$this->currentlinenum += 1;
 			if($fline === FALSE){
 				if(strlen($this->linebuffer)>0){
 					$result = $this->parse_content_line($this->linebuffer);
@@ -2321,7 +2321,7 @@ class ICalendarParser {
 	private function parse_content_line($line){
 		$pos = 0;
 		$name = $this->parse_name($line,$pos);
-		if($name===FALSE) return "Expected property name";
+		if($name===FALSE) return $this->error("Expected property name");
 		$params = array();
 		while(TRUE){
 			$param = $this->parse_param($line,$pos);
@@ -2329,9 +2329,9 @@ class ICalendarParser {
 			$params[$param["name"]] = $param["value"];
 		}
 		$c = $this->expect($line,$pos,":",NULL);
-		if($c===FALSE) return "Expected colon";
+		if($c===FALSE) return $this->error("Expected colon");
 		if(!isset($this->PROP_TYPES[$name]) && substr($name,0,2)!="x-"){
-			return "Unknown property '$name'";
+			return $this->error("Unknown property '$name'");
 		}
 		if(isset($params["value"])){
 			$type = strtolower($params["value"]);
@@ -2356,27 +2356,27 @@ class ICalendarParser {
 			case "binary":
 			case "cal-address":
 			case "uri":			$value = $this->parse_raw($line,$pos); 			break;
-			default:			return "Unknown type '$type'";
+			default:			return $this->error("Unknown type '$type'");
 		}
-		if($value===FALSE) return "Invalid $type value";
+		if($value===FALSE) return $this->error("Invalid $type value");
 		while(TRUE){
 			$curr = $this->current_char($line,$pos);
 			if($curr===FALSE || strpos(" \t",$curr)===FALSE) break;
 			$this->next_char($line,$pos);
 		}
-		if($this->current_char($line,$pos)!==FALSE) return "Expected end of property value";
+		if($this->current_char($line,$pos)!==FALSE) return $this->error("Expected end of property value");
 		return array("name"=>$name, "parameters"=>$params, "value"=>$value);
 	}
 	
 	private function parse_param($line,&$pos){
 		$c = $this->expect($line,$pos,";",NULL);
-		if($c===FALSE) return "Expected semicolon";
+		if($c===FALSE) return $this->error("Expected semicolon");
 		$name = $this->parse_name($line,$pos);
-		if($name===FALSE) return "Expected param name";
+		if($name===FALSE) return $this->error("Expected param name");
 		$c = $this->expect($line,$pos,"=",NULL);
-		if($c===FALSE) return "Expected equals";
+		if($c===FALSE) return $this->error("Expected equals");
 		$value = $this->parse_param_value($line,$pos);
-		if($value===FALSE) return "Expected param value";
+		if($value===FALSE) return $this->error("Expected param value");
 		return array("name"=>$name,"value"=>$value);
 	}
 	
@@ -2863,17 +2863,93 @@ class ICalendarParser {
 				return FALSE;
 			}
 		}elseif($name=="byday"){
-			// TODO
+			$val = array();
+			$v = $this->parse_recur_day_num($line,$pos);
+			if($v===FALSE) return FALSE;
+			array_push($val,$v);
+			while(TRUE){
+				$curr = $this->current_char($line,$pos);
+				if($curr===FALSE || $curr!=",") break;
+				$this->next_char($line,$pos);
+				$v = $this->parse_recur_day_num($line,$pos);
+				if($v===FALSE) return FALSE;
+				array_push($val,$v);
+			}
 		}elseif($name=="bymonthday" || $name=="byyearday" 
 				|| $name=="byweekno" || $name=="bysetpos"){
-			// TODO
+			$val = array();
+			$v = $this->parse_recur_week_num($line,$pos);
+			if($v===FALSE) return FALSE;
+			array_push($val,$v);
+			while(TRUE){
+				$curr = $this->current_char($line,$pos);
+				if($curr===FALSE || $curr!=",") break;
+				$this->next_char($line,$pos);
+				$v = $this->parse_recur_week_num($line,$pos);
+				if($v===FALSE) return FALSE;
+				array_push($val,$v);
+			}
 		}elseif($name=="bysecond" || $name=="byminute" || $name=="byhour" 
 				|| $name=="bymonth" ){
-			// TODO
+			$val = array();
+			$v = $this->parse_digits($line,$pos);
+			if($v===FALSE) return FALSE;
+			array_push($val,(int)$v);
+			while(TRUE){
+				$curr = $this->current_char($line,$pos);
+				if($curr===FALSE || $curr!=",") break;
+				$this->next_char($line,$pos);
+				$v = $this->parse_digits($line,$pos);
+				if($v===FALSE) return FALSE;
+				array_push($val,(int)$v);
+			}
 		}else{
 			return FALSE;
 		}
 		return array("name"=>$name, "value"=>$val);
+	}
+	
+	private function parse_recur_day_num($line,&$pos){
+		$numchars = "0123456789";
+		$sign = 1;
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		if($curr=="+" || $curr=="-"){
+			$sign = $curr=="+" ? 1 : -1;
+			$this->next_char($line,$pos);
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE) return FALSE;
+			if(strpos($numchars,$curr)===FALSE) return FALSE;
+		}
+		$number = NULL;
+		if(strpos($numchars,$curr)!==FALSE){
+			$val = $this->parse_digits($line,$pos);
+			if($val===FALSE) return FALSE;
+			$number = (int)$val * $sign;
+		}
+		$val = $this->parse_name($line,$pos);
+		if($val===FALSE) return FALSE;
+		if($val!="mo" && $val!="tu" && $val!="we" && $val!="th" && $val!="fr" && $val!="sa" && $val!="su"){
+			return FALSE;
+		}
+		$retval = array("day"=>$val);
+		if($number!==NULL) $retval["number"] = $number;
+		return $retval;
+	}
+	
+	private function parse_recur_week_num($line,&$pos){
+		$sign = 1;
+		$curr = $this->current_char($line,$pos);
+		if($curr===FALSE) return FALSE;
+		if($curr=="+" || $curr=="-"){
+			$sign = $curr=="+" ? 1 : -1;
+			$this->next_char($line,$pos);
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE) return FALSE;
+		}
+		$val = $this->parse_digits($line,$pos);
+		if($val===FALSE) return FALSE;
+		return (int)$val * $sign;
 	}
 	
 	private function parse_utc_offset($line,&$pos){
@@ -2946,6 +3022,11 @@ class ICalendarParser {
 		if($pos<strlen($line)){
 			$pos += 1;
 		}
+	}
+	
+	private function error($message){
+		$lineno = $this->currentlinenum;
+		return "$message (line $lineno)";
 	}
 	
 }
