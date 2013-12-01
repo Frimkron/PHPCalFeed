@@ -5,6 +5,7 @@
 //		move duration parsing to core parser
 //		implement recurrence parsing in core parser
 // TODO: icalendar recurring events
+// TODO: json output is broken
 // TODO: icalendar over-escaped files?
 // TODO: update readme
 // TODO: facebook input
@@ -2417,33 +2418,48 @@ class ICalendarParser {
 	}
 	
 	private function parse_texts($line,&$pos){
-		$vals = array();
+		$values = array();
+		$val = $this->parse_text($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_text($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;						
+	}
+	
+	private function parse_text($line,&$pos){
 		$buffer = "";
 		$escape = FALSE;
 		while(TRUE){
 			$curr = $this->current_char($line,$pos);
 			if($curr===FALSE) break;
 			if($escape){
-				switch($curr){
-					case ";": case ",": case "\\": $buffer .= $curr; break;
-					case "n": case "N": $buffer .= "\n"; break;
-					default: $buffer .= "\\".$curr; break;
+				if($curr==";" || $curr=="," || $curr=="\\"){
+					$buffer .= $curr;
+				}elseif($curr=="n" || $curr=="N"){
+					$buffer .= "\n";
+				}else{
+					$buffer .= "\\".$curr;
 				}
 				$escape = FALSE;
 			}else{
 				if($curr=="\\"){
 					$escape = TRUE;
-				}elseif($curr==","){
-					array_push($vals,$buffer);
-					$buffer = "";
+				}elseif($curr=="," || $curr==";"){
+					break;
 				}else{
 					$buffer .= $curr;
 				}
-			}	
-			$this->next_char($line,$pos);		
+			}
+			$this->next_char($line,$pos);
 		}
-		array_push($vals,$buffer);
-		return $vals;
+		return $buffer;
 	}
 	
 	private function parse_boolean($line,&$pos){
@@ -2773,8 +2789,91 @@ class ICalendarParser {
 	}
 	
 	private function parse_recurs($line,&$pos){
-		// TODO
-		return $this->parse_raw($line,$pos);
+		$values = array();
+		$val = $this->parse_recur($line,$pos);
+		if($val===FALSE) return FALSE;
+		array_push($values,$val);
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=",") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_recur($line,$pos);
+			if($val===FALSE) return FALSE;
+			array_push($values,$val);
+		}
+		return $values;
+	}
+	
+	private function parse_recur($line,&$pos){
+		$values = array();
+		$val = $this->parse_recur_param($line,$pos);
+		if($val===FALSE) return FALSE;
+		$values[$val["name"]] = $val["value"];
+		while(TRUE){
+			$curr = $this->current_char($line,$pos);
+			if($curr===FALSE || $curr!=";") break;
+			$this->next_char($line,$pos);
+			$val = $this->parse_recur_param($line,$pos);
+			if($val===FALSE) return FALSE;
+			$values[$val["name"]] = $val["value"];
+		}
+		return $values;
+	}
+	
+	private function parse_recur_param($line,&$pos){
+		$val = $this->parse_name($line,$pos);
+		if($val===FALSE) return FALSE;
+		$name = $val;
+		$c = $this->expect($line,$pos,"=",NULL);
+		if($c===FALSE) return FALSE;
+		if(substr($name,0,2)=="x-"){
+			$val = $this->parse_text($line,$pos);
+			if($val===FALSE) return FALSE;
+		}elseif($name=="freq"){
+			$val = $this->parse_name($line,$pos);
+			if($val===FALSE) return FALSE;
+			if($val!="secondly" && $val!="minutely" && $val!="hourly" && $val!="daily"
+					&& $val!="weekly" && $val!="monthly" && $val!="yearly"){
+				return FALSE;		
+			}			
+		}elseif($name=="until"){
+			$val = $this->parse_date($line,$pos);
+			if($val===FALSE) return FALSE;
+			$date = $val;
+			$curr = $this->current_char($line,$pos);
+			if($curr!==FALSE && $curr=="T"){
+				$this->next_char($line,$pos);
+				$val = $this->parse_time($line,$pos);
+				if($val===FALSE) return FALSE;
+				$time = $val;
+				$val = array("year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
+								"hour"=>$time["hour"], "minute"=>$time["minute"], "second"=>$time["second"],
+								"isutc"=>$time["isutc"]);
+			}else{
+				$val = $date;
+			}
+		}elseif($name=="count" || $name=="interval"){
+			$val = $this->parse_digits($line,$pos);
+			if($val===FALSE) return FALSE;
+			$val = (int)$val;
+		}elseif($name=="wkst"){
+			$val = $this->parse_name($line,$pos);
+			if($val===FALSE) return FALSE;
+			if($val!="su" && $val!="mo" && $val!="tu" && $val!="we" && $val!="th" && $val!="fr" && $val!="sa"){
+				return FALSE;
+			}
+		}elseif($name=="byday"){
+			// TODO
+		}elseif($name=="bymonthday" || $name=="byyearday" 
+				|| $name=="byweekno" || $name=="bysetpos"){
+			// TODO
+		}elseif($name=="bysecond" || $name=="byminute" || $name=="byhour" 
+				|| $name=="bymonth" ){
+			// TODO
+		}else{
+			return FALSE;
+		}
+		return array("name"=>$name, "value"=>$val);
 	}
 	
 	private function parse_utc_offset($line,&$pos){
