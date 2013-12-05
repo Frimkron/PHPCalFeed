@@ -1,12 +1,9 @@
 <?php
 
 // TODO: icalendar recurring events
-//		match count for first week of year can still be wrong - e.g. 3rd weekday starting 2014-01-02
 //		handle rdate, exdate and exrule
 //		handle multiple rrules and exrules
 //		need better way to handle incrementing from start time
-// TODO: update readme
-// TODO: webcal:// in readme
 // TODO: test output in different timezone
 // TODO: facebook input
 //		feasible using oath?
@@ -3529,6 +3526,7 @@ function generate_events($data){
 		$cal->set_hour(0);
 		$cal->set_day(1);
 		$cal->set_month(1);
+		while($cal->get_day_of_week() != $weekstart) $cal->inc_days(-1);
 		$yearcount = 0;
 		$lastyear = $cal->get_year();
 		$lastyearofweek = $cal->get_year_of_week($weekstart);

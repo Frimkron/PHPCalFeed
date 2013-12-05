@@ -1,3 +1,7 @@
+<!--
+  TODO: How to re-skin html
+-->
+
 PHPCalFeed
 ==========
 
@@ -77,9 +81,12 @@ populate your website's calendar.
 
 As an alternative to a file on your own server, PHPCalFeed can read from a file
 on a different server. This is useful if you wish to use another calendar feed
-as the input, such as a public Google calendar. To use a remote file, create 
-the file `calendar-config.php` in the script directory, if it doesn't already 
-exist, and define the `url` property as follows:
+as the input, such as a public Google calendar (see 
+[Google Calendar Input](#326-google-calendar-input) for more on this). 
+To use a remote file, create the file `calendar-config.php` in the script 
+directory, if it doesn't already exist, and define the `url` property by 
+copying the code below into the file, and replacing the example URL. Make sure 
+to copy the code exactly, with the same letter cases, punctuation, etc:
 
 ```php
 <?php
@@ -232,7 +239,8 @@ URL. To do this:
 
 Next, delete the `calendar-config.php` file in the calendar script's directory,
 if it already exists, and create a new one. Set the `url` property to your 
-Google calendar url, by copying the code below and replacing the example url:
+Google calendar url, by copying the code exactly as it appears below and 
+replacing the example url:
 
 ```php
 <?php
@@ -258,39 +266,46 @@ the table below, where `nth` is a date between `1st` and `31st`, `ddd` is the
 first 3 letters of a day of the week, `mmm` is the first 3 letters of a month 
 of the year, `n` is a number and `yyyy-mm-dd` is a date.
 
-|----------------|----|------------------------|---------------------|
-| daily          |    |                        |                     |
-| every n days   |    |                        | starting yyyy-mm-dd |
-| weekly         | on | ddd                    |                     |
-|                |    | nth day                |                     |
-|                |    | nth to last day        |                     |
-| every n weeks  | on | ddd                    | starting yyyy-mm-dd |
-|                |    | nth day                |                     |
-|                |    | nth to last day        |                     |
-| monthly        | on | nth day                |                     |
-|                |    | nth to last day        |                     |
-|                |    | nth ddd                |                     |
-|                |    | nth to last ddd        |                     |
-| every n months | on | nth day                | starting yyyy-mm-dd |
-|                |    | nth to last day        |                     |
-|                |    | nth ddd                |                     |
-|                |    | nth to last ddd        |                     |
-| yearly         | on | nth day                |                     |
-|                |    | nth to last day        |                     |
-|                |    | nth ddd                |                     |
-|                |    | nth to last day        |                     | 
-|                |    | nth of mmm             |                     |
-|                |    | nth day of mmm         |                     |
-|                |    | nth to last day of mmm |                     |
-| every n years  | on | nth day                | starting yyyy-mm-dd |
-|                |    | nth to last day        |                     |
-|                |    | nth ddd                |                     |
-|                |    | nth to last ddd        |                     |
-|                |    | nth of mmm             |                     |
-|                |    | nth day of mmm         |                     |
-|                |    | nth to last day of mmm |                     |
-|                |    | nth ddd of mmm         |                     |
-|                |    | nth to last ddd of mmm |                     |
+|----------------|-------|------------------------|---------------------|
+| daily          |       |                        |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| every n days   |       |                        | starting yyyy-mm-dd |
+|     - - -      |       |         - - -          |        - - -        |
+| weekly         | on    | ddd                    |                     |
+|                |       | nth day                |                     |
+|                |       | nth to last day        |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| every n weeks  | on    | ddd                    | starting yyyy-mm-dd |
+|                |       | nth day                |                     |
+|                |       | nth to last day        |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| monthly        | on    | nth day                |                     |
+|                |       | nth to last day        |                     |
+|                |       | nth ddd                |                     |
+|                |       | nth to last ddd        |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| every n months | on    | nth day                | starting yyyy-mm-dd |
+|                |       | nth to last day        |                     |
+|                |       | nth ddd                |                     |
+|                |       | nth to last ddd        |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| yearly         | on    | nth day                |                     |
+|                |       | nth to last day        |                     |
+|                |       | nth ddd                |                     |
+|                |       | nth to last day        |                     | 
+|                |       | nth of mmm             |                     |
+|                |       | nth day of mmm         |                     |
+|                |       | nth to last day of mmm |                     |
+|     - - -      |       |         - - -          |        - - -        |
+| every n years  | on    | nth day                | starting yyyy-mm-dd |
+|                |       | nth to last day        |                     |
+|                |       | nth ddd                |                     |
+|                |       | nth to last ddd        |                     |
+|                |       | nth of mmm             |                     |
+|                |       | nth day of mmm         |                     |
+|                |       | nth to last day of mmm |                     |
+|                |       | nth ddd of mmm         |                     |
+|                |       | nth to last ddd of mmm |                     |
 
 Here are some examples:
 
