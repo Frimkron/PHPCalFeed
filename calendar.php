@@ -1,6 +1,10 @@
 <?php
 
 // TODO: icalendar recurring events
+//		come up with internal format
+//		have recurrence parser return internal format
+//		have rrule parser return internal format
+//		have event generator use internal format
 // TODO: json output is broken
 // TODO: expiration timestamp should be start of day
 // TODO: update readme
@@ -18,6 +22,9 @@
 // TODO: eventbrite input
 //		api requires oauth?
 //		can user create application token and generate user token for it
+// TODO: Outlook CSV export
+// TODO: Yahoo Calendar CSV export
+// TODO: easy-subscribe widgit
 // TODO: yaml input
 // TODO: yaml output
 // TODO: atom output
@@ -139,22 +146,16 @@ abstract class ICalendarInputBase extends InputFormat {
 					$eventobj->url = $vevent["properties"]["url"][0]["value"];
 				}			
 				
-				if(isset($vevent["properties"]["rrule"])){
-					// TODO: recurrence
-					continue; //ignore for now
-				}else{				
-					// non-recurring
-					if(!isset($vevent["properties"]["dtstart"])){
-						continue; // ignore if no start time
-					}
-					$starttime = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
-					if(is_string($starttime)) return $starttime;
-					$eventobj->year = $starttime["year"];
-					$eventobj->month = $starttime["month"];
-					$eventobj->day = $starttime["day"];
-					$eventobj->hour = $starttime["hour"];
-					$eventobj->minute = $starttime["minute"];
+				if(!isset($vevent["properties"]["dtstart"])){
+					continue; // ignore if no start time
 				}
+				$starttime = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
+				if(is_string($starttime)) return $starttime;
+				$eventobj->year = $starttime["year"];
+				$eventobj->month = $starttime["month"];
+				$eventobj->day = $starttime["day"];
+				$eventobj->hour = $starttime["hour"];
+				$eventobj->minute = $starttime["minute"];
 				
 				if(isset($vevent["properties"]["duration"])){
 					// duration specified
@@ -1483,6 +1484,8 @@ class RecurrenceParser {
 		$retval->week = $week;
 		$retval->month = $month;
 		return $retval;
+		
+		// TODO: come up with internal recurrence format and have this and rrule parser both return it
 	}
 	
 	private function parse_EdOrEwOrEmOrEy($input,$pos){
@@ -3158,6 +3161,21 @@ function generate_events($data){
 	
 	$max_recurring = 50;
 	foreach($data->{"recurring-events"} as $item){
+		// TODO - implement more flexible recurrence system
+	}
+	
+	return $events;
+}
+
+/*
+function generate_events($data){
+
+	$startthres = time();
+	$endthres = time() + 2*365*24*60*60;
+	$events = array();
+	
+	$max_recurring = 50;
+	foreach($data->{"recurring-events"} as $item){
 		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
 		$cal = new Calendar($rec->start);
@@ -3418,7 +3436,7 @@ function generate_events($data){
 	});
 	
 	return $events;
-}
+}*/
 
 function get_config_filename($scriptname){
 	return "$scriptname-config.php";
