@@ -1,10 +1,9 @@
 <?php
 
 // TODO: icalendar recurring events
-//		come up with internal format
-//		have recurrence parser return internal format
-//		have rrule parser return internal format
+//		have rrule parser return internal format		
 //		have event generator use internal format
+//		have recurrence parser return internal format
 // TODO: json output is broken
 // TODO: expiration timestamp should be start of day
 // TODO: update readme
@@ -54,7 +53,8 @@ abstract class InputFormat {
 			day (required)
 			hour
 			minute
-			duration (days,hours,minutes)
+			second
+			duration (days,hours,minutes,seconds)
 			description
 			url			
 		recurring-events
@@ -62,7 +62,8 @@ abstract class InputFormat {
 			recurrence (required)
 			hour
 			minute
-			duration (days,hours,minutes)
+			second
+			duration (days,hours,minutes,seconds)
 			description
 			url				*/
 
@@ -156,6 +157,7 @@ abstract class ICalendarInputBase extends InputFormat {
 				$eventobj->day = $starttime["day"];
 				$eventobj->hour = $starttime["hour"];
 				$eventobj->minute = $starttime["minute"];
+				$eventobj->second = $starttime["second"];
 				
 				if(isset($vevent["properties"]["duration"])){
 					// duration specified
@@ -171,30 +173,38 @@ abstract class ICalendarInputBase extends InputFormat {
 						if(is_string($starttime)) return $starttime;
 						$startcal = new DateTime();
 						$startcal->setDate($starttime["year"],$starttime["month"],$starttime["day"]);
-						$startcal->setTime($starttime["hour"],$starttime["minute"]);
+						$startcal->setTime($starttime["hour"],$starttime["minute"],$starttime["second"]);
 						$endtime = $this->convert_datetime($vevent["properties"]["dtend"][0]);
 						if(is_string($endtime)) return $endtime;
 						$endcal = new DateTime();
 						$endcal->setDate($endtime["year"],$endtime["month"],$endtime["day"]);
-						$endcal->setTime($endtime["hour"],$endtime["minute"]);
+						$endcal->setTime($endtime["hour"],$endtime["minute"],$endtime["second"]);
 						$diff = $startcal->diff($endcal);
 						$eventobj->duration = array( "days" => $diff->y*365 + $diff->m*31 + $diff->d, //close enough :/
-								"hours" => $diff->h, "minutes" => $diff->i );					
+								"hours" => $diff->h, "minutes" => $diff->i, "seconds" => $diff->s );					
 					}elseif(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
 						// start specified as date
-						$eventobj->duration = array("days"=>1,"hours"=>0,"minutes"=>0);
+						$eventobj->duration = array("days"=>1,"hours"=>0,"minutes"=>0, "seconds"=>0);
 					}else{
 						// start specified as datetime
-						$eventobj->duration = array("days"=>0,"hours"=>0,"minutes"=>0);
+						$eventobj->duration = array("days"=>0,"hours"=>0,"minutes"=>0, "seconds"=>0);
 					}
 				}else{
 					return "ICalendar: Cannot determine duration for '".$eventobj->name."'";
 				}
+		
+				array_push($calobj->events,$eventobj);
+		
+				$rrules = isset($vevent["properties"["rrule"]) ? $vevent["properties"]["rrule"] : NULL;
+				$exrules = isset($vevent["properties"]["exrule"]) ? $vevent["properties"]["exrule"] : NULL;
+				$rdates = isset($vevent["properties"]["rdate"]) ? $vevent["properties"]["rdate"] : NULL;
+				$exdates = isset($vevent["properties"]["exdate"]) ? $vevent["properties"]["exdate"] : NULL;
 				
-				if(isset($eventobj->recurrence)){
+				if($rrules!==NULL || $exrules!==NULL || $rdates!==NULL || $exdates!==NULL){				
+					$recurrence = $this->convert_recurrence($rrules,$exrules,$rdates,$exdates);
+					if(is_string($recurrence)) return $recurrence;
+					$eventobj->recurrence = $recurrence;
 					array_push($calobj->{"recurring-events"},$eventobj);
-				}else{
-					array_push($calobj->events,$eventobj);
 				}
 			}
 		}
@@ -216,7 +226,7 @@ abstract class ICalendarInputBase extends InputFormat {
 			# date only
 			$date = $property["value"][0];
 			return array( "year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
-					"hour"=>0, "minute"=>0 );
+					"hour"=>0, "minute"=>0, "second"=>0);
 		}else{
 			# date and time
 			$datetime = $property["value"][0];
@@ -236,15 +246,29 @@ abstract class ICalendarInputBase extends InputFormat {
 			$cal = new DateTime($datetime["year"]."-".$datetime["month"]."-".$datetime["day"]
 					." ".$datetime["hour"].":".$datetime["minute"], $timezone);
 			$cal = new DateTime("@".$cal->getTimestamp());
-			return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), 
-				"day"=>$cal->format("j"), "hour"=>$cal->format("G"), "minute"=>$cal->format("i") );
+			return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), "day"=>$cal->format("j"), 
+				"hour"=>$cal->format("G"), "minute"=>$cal->format("i"), "second"=>$cal->format("s") );
 		}
 	}
 	
 	private function convert_duration($property){
 		$dur = $property["value"][0];
-		return array( "days"=>$dur["weeks"]*7+$dur["days"], 
-			"hours"=>$dur["hours"], "minutes"=>$dur["minutes"] );
+		return array( "days"=>$dur["weeks"]*7+$dur["days"], "hours"=>$dur["hours"], 
+			"minutes"=>$dur["minutes"], "seconds"=>$dur["seconds"] );
+	}
+	
+	private function convert_recurrence($rruleprops,$exruleprops,$rdateprops,$exdateprops,$starttime){
+		if($rruleprops!==NULL && sizeof($rruleprops) > 1 || sizeof($rruleprops[0]["value"]) > 1){ 
+			return "ICalendar: multiple RRULEs not supported";
+		}
+		if($exruleprops!==NULL) return "ICalendar: EXRULE not supported";
+		if($rdateprops!==NULL) return "ICalendar: RDATE not supported";
+		if($exdateprops!==NULL) return "ICalendar: EXDATE not supported";
+		$rrule = $rruleprops[0]["value"][0];
+		$rules = array();
+		if(!isset($rrule["freq"])) return "ICalendar: RRULE without FREQ parameter";
+		
+		// TODO...
 	}
 } 
 
@@ -378,6 +402,7 @@ abstract class CsvInputBase extends InputFormat {
 			$bits = explode(":",$etime);
 			$event->hour = $bits[0];
 			$event->minute = $bits[1];
+			$event->second = 0;
 			
 			$eduration = "";
 			if(array_key_exists("duration",$colmap)){
@@ -385,7 +410,7 @@ abstract class CsvInputBase extends InputFormat {
 			}
 			if(strlen($eduration)==0) $eduration = "1d";
 			$eduration = parse_duration($eduration);
-			if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0h][0m][0s]'";
+			if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";
 			$event->duration = $eduration;
 			
 			if(array_key_exists("description",$colmap)){
@@ -527,6 +552,7 @@ abstract class JsonInputBase extends InputFormat {
 				$bits = explode(":",$item->time);
 				$item->hour = $bits[0];
 				$item->minute = $bits[1];
+				$item->second = 0;
 				unset($item->time);
 				if(!isset($item->duration)){
 					$item->duration = "1d";
@@ -555,6 +581,7 @@ abstract class JsonInputBase extends InputFormat {
 				$bits = explode(":",$item->time);
 				$item->hour = $bits[0];
 				$item->minute = $bits[1];
+				$item->second = 0;
 				unset($item->time);
 				if(!isset($item->duration)){
 					$item->duration = "1d";
@@ -2604,7 +2631,7 @@ class ICalendarParser {
 	
 	private function parse_duration($line,&$pos){
 		$numchars = '0123456789';
-		$buffer = '-\n"\n-\n~\n-\n3\n-\n^\n-\n~\n0\n-\n/\n-';
+		$buffer = '-"-~-3-^-~0-/-';
 		$positive = TRUE;
 		$weeks = 0;
 		$days = 0;
@@ -3117,7 +3144,8 @@ function parse_duration($input){
 	return array(
 		"days"		=> (sizeof($matches) > 1 && $matches[1]) ? $matches[1] : 0,
 		"hours"		=> (sizeof($matches) > 2 && $matches[2]) ? $matches[2] : 0,
-		"minutes"	=> (sizeof($matches) > 3 && $matches[3]) ? $matches[3] : 0
+		"minutes"	=> (sizeof($matches) > 3 && $matches[3]) ? $matches[3] : 0,
+		"seconds"	=> 0
 	);
 }
 
@@ -3147,6 +3175,7 @@ function make_event($eventinfo,$starttime,$duration){
 	$cal->inc_days($duration["days"]);
 	$cal->inc_hours($duration["hours"]);
 	$cal->inc_minutes($duration["minutes"]);
+	$cal->inc_seconds($duration["seconds"]);
 	$endtime = $cal->time;
 	$event->{"start-time"} = $starttime;
 	$event->{"end-time"} = $endtime;
@@ -3159,10 +3188,33 @@ function generate_events($data){
 	$endthres = time() + 2*365*24*60*60;
 	$events = array();
 	
+	// recurring events
 	$max_recurring = 50;
 	foreach($data->{"recurring-events"} as $item){
-		// TODO - implement more flexible recurrence system
+		if(sizeof($events) >= $max_recurring) break;
+		$rec = $item->recurrence;
+		$cal = new Calendar($rec->start);
+		$cal->set_hour($item->hour);
+		$cal->set_minute($item->minute);
+		$cal->set_second($item->second);
+		
 	}
+	
+	// fixed events
+	foreach($data->events as $item){
+		$itemtime = strtotime($item->year."-".$item->month."-".$item->day
+				." ".$item->hour.":".$item->minute.":".$item->second);
+		if($itemtime >= $startthres && $itemtime < $endthres){
+			array_push($events,make_event($item, $itemtime, $item->duration));
+		}
+	}
+	
+	// sort by date
+	usort($events, function($a,$b){ 
+		if($a->{"start-time"} > $b->{"start-time"}) return 1;
+		elseif($a->{"start-time"} < $b->{"start-time"}) return -1;
+		else return 0;
+	});
 	
 	return $events;
 }
@@ -3422,7 +3474,7 @@ function generate_events($data){
 	// fixed events
 	foreach($data->events as $item){
 		$itemtime = strtotime($item->year."-".$item->month."-".$item->day
-				." ".$item->hour.":".$item->minute);
+				." ".$item->hour.":".$item->minute.":".$item->second);
 		if($itemtime >= $startthres && $itemtime < $endthres){
 			array_push($events,make_event($item, $itemtime, $item->duration));
 		}
