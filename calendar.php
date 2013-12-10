@@ -229,26 +229,29 @@ abstract class ICalendarInputBase extends InputFormat {
 					"hour"=>0, "minute"=>0, "second"=>0);
 		}else{
 			# date and time
-			$datetime = $property["value"][0];
-			if($datetime["isutc"]){
-				$timezone = new DateTimeZone("UTC");		
-			}elseif(isset($property["parameters"]["tzid"])){
-				$tzid = $property["parameters"]["tzid"];				
-				try {
-					$timezone = new DateTimeZone($tzid);
-				}catch(Exception $e){
-					return "ICalendar: timezone '$tzid' unknown and timezone construction not implemented";
-				}
-			}else{
-				$newdate = new DateTime();
-				$timezone = $newdate->getTimezone();
-			}	
-			$cal = new DateTime($datetime["year"]."-".$datetime["month"]."-".$datetime["day"]
-					." ".$datetime["hour"].":".$datetime["minute"], $timezone);
-			$cal = new DateTime("@".$cal->getTimestamp());
-			return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), "day"=>$cal->format("j"), 
-				"hour"=>$cal->format("G"), "minute"=>$cal->format("i"), "second"=>$cal->format("s") );
+			return $this->convert_datetime_value($property["value"][0],$property["parameters"]);
 		}
+	}
+	
+	private function convert_datetime_value($value,$parameters){
+		if($value["isutc"]){
+			$timezone = new DateTimeZone("UTC");		
+		}elseif(isset($parameters["tzid"])){
+			$tzid = $parameters["tzid"];				
+			try {
+				$timezone = new DateTimeZone($tzid);
+			}catch(Exception $e){
+				return "ICalendar: timezone '$tzid' unknown and timezone construction not implemented";
+			}
+		}else{
+			$newdate = new DateTime();
+			$timezone = $newdate->getTimezone();
+		}	
+		$cal = new DateTime($value["year"]."-".$value["month"]."-".$value["day"]
+				." ".$value["hour"].":".$value["minute"].":".$value["second"], $timezone);
+		$cal = new DateTime("@".$cal->getTimestamp());
+		return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), "day"=>$cal->format("j"), 
+			"hour"=>$cal->format("G"), "minute"=>$cal->format("i"), "second"=>$cal->format("s") );
 	}
 	
 	private function convert_duration($property){
@@ -268,7 +271,67 @@ abstract class ICalendarInputBase extends InputFormat {
 		$rules = array();
 		if(!isset($rrule["freq"])) return "ICalendar: RRULE without FREQ parameter";
 		
-		// TODO...
+		$result = array( 
+			"start"=>$starttime, 
+			"rules"=>array(),
+			"time"=>array( 
+				"day-hour"=>array($starttime["hour"]), 
+				"hour-minute"=>array($starttime["minute"]),
+				"minute-second"=>array($starttime["second"])
+			)
+		);
+		if(isset($rrule["until"])){		
+			$result["end"] = $this->convert_datetime_value($rrule["until"],array());
+		}
+		if(isset($rrule["count"])){
+			$result["count"] = $rrule["count"] - 1; // internal format doesnt include dtstart occurence
+		}
+		if(isset($rrule["interval"])){
+			switch($rrule["freq"]){
+				case "yearly":		$rulename="year-ival";		break;
+				case "monthly": 	$rulename="month-ival";		break;
+				case "weekly": 		$rulename="week-ival";		break;
+				case "daily": 		$rulename="day-ival";		break;
+				case "hourly": 		$rulename="hour-ival";		break;
+				case "minutely": 	$rulename="minute-ival";	break;
+				case "secondly": 	$rulename="second-ival";	break;
+				default: return "ICalendar: Unknown FREQ value '".$rrule["freq"]."'";
+			}
+			$result["rules"][$rulename] = $rrule["interval"];
+		}
+		if(isset($rrule["bysecond"])){
+			$result["time"]["minute-second"] = $rrule["bysecond"];
+		}
+		if(isset($rrule["byminute"])){
+			$result["time"]["hour-minute"] = $rrule["byminute"];
+		}
+		if(isset($rrule["byhour"])){
+			$result["time"]["day-hour"] = $rrule["byhour"];
+		}
+		if(isset($rrule["byday"])){
+			switch($rrule["byday"]["day"]){
+				case "mo": $daynum = 1; break;
+				case "tu": $daynum = 2; break;
+				case "we": $daynum = 3; break;
+				case "th": $daynum = 4; break;
+				case "fr": $daynum = 5; break;
+				case "sa": $daynum = 6; break;
+				case "su": $daynum = 7; break;
+				default: return "ICalendar: invalid day value '".$rrule["byday"]["day"]."'";
+			}
+			if(isset($rrule["byday"]["number"])){
+				if($rrule["freq"]=="yearly"){
+					$result["rules"]["year-week-day"] = array( "number"=>$rrule["byday"]["number"], "day"=>$daynum );
+				}elseif($rrule["freq"]=="monthly"){
+					$result["rules"]["month-week-day"] = array( "number"=>$rrule["byday"]["number"], "day"=>$daynum );
+				}else{
+					return "ICalendar: quantified BYDAY invalid with '".$rrule["freq"]."' FREQ";
+				}
+			}else{				
+				$result["rules"]["week-day"] = $daynum;
+			}
+		}
+		// TODO
 	}
 } 
 
