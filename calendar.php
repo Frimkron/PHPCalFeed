@@ -1,6 +1,7 @@
 <?php
 
 // TODO: icalendar recurring events
+//		TODO: frequency of hourly minutely or secondly doesnt fit into increment-day pattern
 //		have rrule parser return internal format		
 //		have event generator use internal format
 //		have recurrence parser return internal format
@@ -195,13 +196,13 @@ abstract class ICalendarInputBase extends InputFormat {
 		
 				array_push($calobj->events,$eventobj);
 		
-				$rrules = isset($vevent["properties"["rrule"]) ? $vevent["properties"]["rrule"] : NULL;
+				$rrules = isset($vevent["properties"]["rrule"]) ? $vevent["properties"]["rrule"] : NULL;
 				$exrules = isset($vevent["properties"]["exrule"]) ? $vevent["properties"]["exrule"] : NULL;
 				$rdates = isset($vevent["properties"]["rdate"]) ? $vevent["properties"]["rdate"] : NULL;
 				$exdates = isset($vevent["properties"]["exdate"]) ? $vevent["properties"]["exdate"] : NULL;
 				
 				if($rrules!==NULL || $exrules!==NULL || $rdates!==NULL || $exdates!==NULL){				
-					$recurrence = $this->convert_recurrence($rrules,$exrules,$rdates,$exdates);
+					$recurrence = $this->convert_recurrence($rrules,$exrules,$rdates,$exdates,$starttime);
 					if(is_string($recurrence)) return $recurrence;
 					$eventobj->recurrence = $recurrence;
 					array_push($calobj->{"recurring-events"},$eventobj);
@@ -250,8 +251,8 @@ abstract class ICalendarInputBase extends InputFormat {
 		$cal = new DateTime($value["year"]."-".$value["month"]."-".$value["day"]
 				." ".$value["hour"].":".$value["minute"].":".$value["second"], $timezone);
 		$cal = new DateTime("@".$cal->getTimestamp());
-		return array( "year"=>$cal->format("Y"), "month"=>$cal->format("n"), "day"=>$cal->format("j"), 
-			"hour"=>$cal->format("G"), "minute"=>$cal->format("i"), "second"=>$cal->format("s") );
+		return array( "year"=>(int)$cal->format("Y"), "month"=>(int)$cal->format("n"), "day"=>(int)$cal->format("j"), 
+			"hour"=>(int)$cal->format("G"), "minute"=>(int)$cal->format("i"), "second"=>(int)$cal->format("s") );
 	}
 	
 	private function convert_duration($property){
@@ -268,23 +269,30 @@ abstract class ICalendarInputBase extends InputFormat {
 		if($rdateprops!==NULL) return "ICalendar: RDATE not supported";
 		if($exdateprops!==NULL) return "ICalendar: EXDATE not supported";
 		$rrule = $rruleprops[0]["value"][0];
-		$rules = array();
 		if(!isset($rrule["freq"])) return "ICalendar: RRULE without FREQ parameter";
 		
-		$result = array( 
-			"start"=>$starttime, 
-			"rules"=>array(),
-			"time"=>array( 
-				"day-hour"=>array($starttime["hour"]), 
-				"hour-minute"=>array($starttime["minute"]),
-				"minute-second"=>array($starttime["second"])
-			)
-		);
+		$result = array( "start"=>$starttime, "rules"=>array() );
+		
 		if(isset($rrule["until"])){		
 			$result["end"] = $this->convert_datetime_value($rrule["until"],array());
 		}
 		if(isset($rrule["count"])){
 			$result["count"] = $rrule["count"] - 1; // internal format doesnt include dtstart occurence
+		}
+		if(isset($rrule["wkst"])){
+			switch($rrule["wkst"]){
+				case "mo": $daynum = 1; break;
+				case "tu": $daynum = 2; break;
+				case "we": $daynum = 3; break;
+				case "th": $daynum = 4; break;
+				case "fr": $daynum = 5; break;
+				case "sa": $daynum = 6; break;
+				case "su": $daynum = 7; break;
+				default: return "ICalendar: invalid WKST value '".$rrule["wkst"]."'";
+			}
+			$result["week-start"] = $daynum;
+		}else{
+			$result["week-start"] = 1;
 		}
 		if(isset($rrule["interval"])){
 			switch($rrule["freq"]){
@@ -300,38 +308,120 @@ abstract class ICalendarInputBase extends InputFormat {
 			$result["rules"][$rulename] = $rrule["interval"];
 		}
 		if(isset($rrule["bysecond"])){
-			$result["time"]["minute-second"] = $rrule["bysecond"];
+			$result["rules"]["minute-second"] = $rrule["bysecond"];
 		}
 		if(isset($rrule["byminute"])){
-			$result["time"]["hour-minute"] = $rrule["byminute"];
+			$result["rules"]["hour-minute"] = $rrule["byminute"];
 		}
 		if(isset($rrule["byhour"])){
-			$result["time"]["day-hour"] = $rrule["byhour"];
+			$result["rules"]["day-hour"] = $rrule["byhour"];
 		}
 		if(isset($rrule["byday"])){
-			switch($rrule["byday"]["day"]){
-				case "mo": $daynum = 1; break;
-				case "tu": $daynum = 2; break;
-				case "we": $daynum = 3; break;
-				case "th": $daynum = 4; break;
-				case "fr": $daynum = 5; break;
-				case "sa": $daynum = 6; break;
-				case "su": $daynum = 7; break;
-				default: return "ICalendar: invalid day value '".$rrule["byday"]["day"]."'";
-			}
-			if(isset($rrule["byday"]["number"])){
-				if($rrule["freq"]=="yearly"){
-					$result["rules"]["year-week-day"] = array( "number"=>$rrule["byday"]["number"], "day"=>$daynum );
-				}elseif($rrule["freq"]=="monthly"){
-					$result["rules"]["month-week-day"] = array( "number"=>$rrule["byday"]["number"], "day"=>$daynum );
+			$wd_rulebits = array();
+			$spec_rulebits = array();
+			foreach($rrule["byday"] as $byday){
+				switch($byday["day"]){
+					case "mo": $daynum = 1; break;
+					case "tu": $daynum = 2; break;
+					case "we": $daynum = 3; break;
+					case "th": $daynum = 4; break;
+					case "fr": $daynum = 5; break;
+					case "sa": $daynum = 6; break;
+					case "su": $daynum = 7; break;
+					default: return "ICalendar: invalid day value '".$byday["day"]."'";
+				}				
+				if(isset($byday["number"])){ 
+					array_push($spec_rulebits,array( "day" =>$daynum, "number"=>$byday["number"] ));
 				}else{
-					return "ICalendar: quantified BYDAY invalid with '".$rrule["freq"]."' FREQ";
+					array_push($wd_rulebits,$byday["number"]);
 				}
-			}else{				
-				$result["rules"]["week-day"] = $daynum;
+			}
+			if(sizeof($wd_rulesbits)>0){
+				$result["rules"]["week-day"] = $wd_rulebits;
+			}
+			if(sizeof($spec_rulebits)>0){
+				switch($rrule["freq"]){
+					case "yearly": $result["rules"]["year-week-day"] = $spec_rulebits; break;
+					case "monthly": $result["rules"]["month-week-day"] = $spec_rulebits; break;
+					default: return "ICalendar: quantified BYDAY invalid with '".$rrule["freq"]."' FREQ";
+				}
 			}
 		}
-		// TODO
+		if(isset($rrule["bymonthday"])){
+			$result["rules"]["month-day"] = $rrule["bymonthday"];
+		}
+		if(isset($rrule["byyearday"])){
+			$result["rules"]["year-day"] = $rrule["byyearday"];
+		}
+		if(isset($rrule["byweekno"])){
+			$result["rules"]["year-week"] = $rrule["byweekno"];
+		}
+		if(isset($rrule["bymonth"])){
+			$result["rules"]["year-month"] = $rrule["bymonth"];
+		}
+		if(isset($rrule["bysetpos"])){
+			$poses = array();
+			foreach($rrule["bysetpos"] as $setpos){
+				// -1 because dtstart isn't included for internal format
+				array_push($poses,$setpos>0 ? $setpos-1 : $setpos);
+			}
+			switch($rrule["freq"]){
+				case "yearly":   $result["rules"]["year-match"] = $poses;   break;
+				case "monthly":  $result["rules"]["month-match"] = $poses;  break;
+				case "weekly":   $result["rules"]["week-match"] = $poses;   break;
+				case "daily":    $result["rules"]["day-match"] = $poses;    break;
+				case "hourly":   $result["rules"]["hour-match"] = $poses;   break;
+				case "minutely": $result["rules"]["minute-match"] = $poses; break;
+				case "secondly": $result["rules"]["second-match"] = $poses; break;
+				default: return "ICalendar: invalid FREQ value '".$rrule["freq"]."'";
+			}
+		}
+		
+		// TODO: this logic isn't right yet - should specify from smallest specified, down
+		//		i.e. check for presence of any smaller rules present at each stage
+		// fill in remaining rules from dtstart
+		switch($rrule["freq"]){
+			case "yearly":
+				if(!isset($result["rules"]["year-month"]) && !isset($result["rules"]["year-day"])
+						&& !isset($result["rules"]["year-week-day"])){
+					$result["rules"]["year-month"] = array( $starttime["month"] );
+				}
+				// fall through
+			case "monthly":
+				if(!isset($result["rules"]["month-day"]) && !isset($result["rules"]["week-day"])
+						&& !isset($result["rules"]["year-week-day"]) && !isset($result["rules"]["month-week-day"])
+						&& !isset($result["rules"]["year-day"])){
+					$result["rules"]["month-day"] = array( $starttime["day"] );
+				}
+				// fall through
+			case "weekly":
+				if(!isset($result["rules"]["month-day"]) && !isset($result["rules"]["week-day"])
+						&& !isset($result["rules"]["year-week-day"]) && !isset($result["rules"]["month-week-day"])
+						&& !isset($result["rules"]["year-day"])){
+					$result["rules"]["week-day"] = array(); // TODO: work out starttime's dow
+				}
+				// fall through
+			case "daily":    
+				if(!isset($result["rules"]["day-hour"])){
+					$result["rules"]["day-hour"] = array( $starttime["hour"] ); 
+				}
+				// fall through
+			case "hourly":   
+				if(!isset($result["rules"]["hour-minute"])){
+					$result["rules"]["hour-minute"] = array( $starttime["minute"] ); 
+				}
+				// fall through
+			case "minutely": 
+				if(!isset($result["rules"]["minute-second"])){
+					$result["rules"]["minute-second"] = array( $starttime["second"] ); 
+				}
+				// fall through
+			case "secondly": 				
+				break; // nothing
+			default: return "ICalendar: invalid FREQ value '".$rrule["freq"]."'";
+		}
+		
+		return $result;
 	}
 } 
 
@@ -3687,7 +3777,7 @@ $input_formats = array(
 	new LocalCsvInput(),
 	new NoInput()
 );
-
+/*
 $result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
@@ -3695,3 +3785,20 @@ if($result===FALSE){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
+*/
+
+class Foo extends ICalendarInputBase {
+	public function convert(){
+		$handle = @fopen("test.ics","r");
+		if($handle===FALSE) return "Couldn't open";
+		$result = $this->feed_to_event_data($handle);
+		fclose($handle);
+		return $result;
+	}
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){}
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){}
+}
+
+$f = new Foo();
+$result = $f->convert();
+var_dump($result);
