@@ -60,7 +60,7 @@ abstract class InputFormat {
 			url			
 		recurring-events
 			name (required)
-			recurrence (required)
+			recurrence (required) (start,[end],[count],week-start,rules)
 			hour
 			minute
 			second
@@ -271,7 +271,7 @@ abstract class ICalendarInputBase extends InputFormat {
 		$rrule = $rruleprops[0]["value"][0];
 		if(!isset($rrule["freq"])) return "ICalendar: RRULE without FREQ parameter";
 		
-		$result = array( "start"=>$starttime, "rules"=>array() );
+		$result = array( "start"=>$starttime, "rules"=>array(), "week-start"=>1 );
 		
 		if(isset($rrule["until"])){		
 			$result["end"] = $this->convert_datetime_value($rrule["until"],array());
@@ -291,8 +291,6 @@ abstract class ICalendarInputBase extends InputFormat {
 				default: return "ICalendar: invalid WKST value '".$rrule["wkst"]."'";
 			}
 			$result["week-start"] = $daynum;
-		}else{
-			$result["week-start"] = 1;
 		}
 		if(isset($rrule["interval"])){
 			switch($rrule["freq"]){
@@ -316,9 +314,8 @@ abstract class ICalendarInputBase extends InputFormat {
 		if(isset($rrule["byhour"])){
 			$result["rules"]["day-hour"] = $rrule["byhour"];
 		}
-		if(isset($rrule["byday"])){
-			$wd_rulebits = array();
-			$spec_rulebits = array();
+		if(isset($rrule["byday"])){		
+			$rulebits = array();
 			foreach($rrule["byday"] as $byday){
 				switch($byday["day"]){
 					case "mo": $daynum = 1; break;
@@ -330,21 +327,16 @@ abstract class ICalendarInputBase extends InputFormat {
 					case "su": $daynum = 7; break;
 					default: return "ICalendar: invalid day value '".$byday["day"]."'";
 				}				
+				$rulebit = array( "day"=>$daynum );
 				if(isset($byday["number"])){ 
-					array_push($spec_rulebits,array( "day" =>$daynum, "number"=>$byday["number"] ));
-				}else{
-					array_push($wd_rulebits,$byday["number"]);
+					$rulebit["number"] = $byday["number"];
 				}
+				array_push($rulebits,$rulebit);
 			}
-			if(sizeof($wd_rulesbits)>0){
-				$result["rules"]["week-day"] = $wd_rulebits;
-			}
-			if(sizeof($spec_rulebits)>0){
-				switch($rrule["freq"]){
-					case "yearly": $result["rules"]["year-week-day"] = $spec_rulebits; break;
-					case "monthly": $result["rules"]["month-week-day"] = $spec_rulebits; break;
-					default: return "ICalendar: quantified BYDAY invalid with '".$rrule["freq"]."' FREQ";
-				}
+			if($rrule["freq"]=="monthly" || ($rrule["freq"]=="yearly" && isset($rrule["bymonth"]))){
+				$result["rules"]["month-week-day"] = $rulebits;
+			}else{
+				$result["rules"]["year-week-day"] = $rulebits;
 			}
 		}
 		if(isset($rrule["bymonthday"])){
@@ -377,37 +369,44 @@ abstract class ICalendarInputBase extends InputFormat {
 			}
 		}
 		
-		// TODO: this logic isn't right yet - should specify from smallest specified, down
-		//		i.e. check for presence of any smaller rules present at each stage
 		// fill in remaining rules from dtstart
 		switch($rrule["freq"]){
 			case "yearly":
-				if(!isset($result["rules"]["year-month"]) && !isset($result["rules"]["year-day"])
-						&& !isset($result["rules"]["year-week-day"])){
+				if(!isset($result["rules"]["year-month"]) && !isset($result["rules"]["year-week"])
+						&& !isset($result["rules"]["year-day"]) && !isset($result["rules"]["year-week-day"])
+						&& !isset($result["rules"]["month-day"]) && !isset($result["rules"]["month-week-day"])
+						&& !isset($result["rules"]["day-hour"]) && !isset($result["rules"]["hour-minute"]) 
+						&& !isset($result["rules"]["minute-second"])){			
 					$result["rules"]["year-month"] = array( $starttime["month"] );
 				}
 				// fall through
 			case "monthly":
-				if(!isset($result["rules"]["month-day"]) && !isset($result["rules"]["week-day"])
-						&& !isset($result["rules"]["year-week-day"]) && !isset($result["rules"]["month-week-day"])
-						&& !isset($result["rules"]["year-day"])){
+				if(!isset($result["rules"]["year-week"]) && !isset($result["rules"]["year-day"])
+						&& !isset($result["rules"]["year-week-day"]) && !isset($result["rules"]["month-day"])
+						&& !isset($result["rules"]["month-week-day"]) && !isset($result["rules"]["day-hour"]) 
+						&& !isset($result["rules"]["hour-minute"]) && !isset($result["rules"]["minute-second"])){			
 					$result["rules"]["month-day"] = array( $starttime["day"] );
 				}
 				// fall through
 			case "weekly":
-				if(!isset($result["rules"]["month-day"]) && !isset($result["rules"]["week-day"])
-						&& !isset($result["rules"]["year-week-day"]) && !isset($result["rules"]["month-week-day"])
-						&& !isset($result["rules"]["year-day"])){
-					$result["rules"]["week-day"] = array(); // TODO: work out starttime's dow
+				if(!isset($result["rules"]["year-day"]) && !isset($result["rules"]["year-week-day"]) 
+						&& !isset($result["rules"]["month-day"]) && !isset($result["rules"]["month-week-day"]) 
+						&& !isset($result["rules"]["day-hour"]) && !isset($result["rules"]["hour-minute"]) 
+						&& !isset($result["rules"]["minute-second"])){
+					$cal = new DateTime($starttime["year"]."-".$starttime["month"]."-".$starttime["day"]
+						." ".$starttime["hour"].":".$starttime["minute"].":".$starttime["second"]);
+					$dow = $cal->format("N");
+					$result["rules"]["year-week-day"] = array( array("day"=>$dow) );
 				}
 				// fall through
 			case "daily":    
-				if(!isset($result["rules"]["day-hour"])){
+				if(!isset($result["rules"]["day-hour"]) && !isset($result["rules"]["hour-minute"]) 
+						&& !isset($result["rules"]["minute-second"])){
 					$result["rules"]["day-hour"] = array( $starttime["hour"] ); 
 				}
 				// fall through
 			case "hourly":   
-				if(!isset($result["rules"]["hour-minute"])){
+				if(!isset($result["rules"]["hour-minute"]) && !isset($result["rules"]["minute-second"])){
 					$result["rules"]["hour-minute"] = array( $starttime["minute"] ); 
 				}
 				// fall through
@@ -3346,10 +3345,44 @@ function generate_events($data){
 	foreach($data->{"recurring-events"} as $item){
 		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
-		$cal = new Calendar($rec->start);
-		$cal->set_hour($item->hour);
-		$cal->set_minute($item->minute);
-		$cal->set_second($item->second);
+		if(isset($rec["rules"]["day-hour"])){
+			$checkhours = array();
+			foreach($rec["rules"]["day-hour"] as $hour) array_push($checkhours,$hour>=0 ? $hour : 24-$hour);
+		}else{
+			$checkhours = array();
+			for($i=0;$i<24;$i++) array_push($checkhours,$i);
+		}
+		if(isset($rec["rules"]["hour-minute"])){
+			$checkmins = array();
+			foreach($rec["rules"]["hour-minute"] as $min) array_push($checkmins,$min>=0 ? $min : 60-$min);
+		}else{
+			$checkmins = array();
+			for($i=0;$i<60;$i++) array_push($checkmins,$i);
+		}
+		// doesnt handle leap second, but oh well
+		if(isset($rec["rules"]["minute-second"])){
+			$checksecs = array();
+			foreach($rec["rules"]["minute-second"] as $sec) array_push($checksecs,$sec>=0 ? $sec : 60-$sec);
+		}else{
+			$checksecs = array();
+			for($i=0;$i<60;$i++) array_push($checksecs,$i);
+		}
+		$start = $rec->start;
+		$cal = new Calendar($start["year"]."-".$start["month"]."-".$start["day"]
+			." ".$start["hour"].":".$start["minute"].":".$start["second"]);
+		while(TRUE){
+			// TODO
+			foreach($checkhours as $hour){
+				foreach($checkmins as $min){
+					foreach($checksecs as $sec){
+						$cal->set_hour($hour);
+						$cal->set_minute($minute);
+						$cal->set_second($second);
+						// TODO
+					}
+				}
+			}
+		}
 		
 	}
 	
