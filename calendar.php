@@ -3202,24 +3202,20 @@ class ICalendarParser {
 
 class Calendar {
 	
-	public function __construct($timeoryear,$month=-1,$day=-1){
+	public function __construct($timeoryear,$month=-1,$day=-1,$hour=0,$min=0,$sec=0){
 		if($month==-1 && $day==-1){
-			$this->time = $timeoryear;
+			$this->time = (int)$timeoryear;
 		}else{
-			$this->time = strtotime("$timeoryear-$month-$day");
+			$this->time = strtotime("$timeoryear-$month-$day $hour:$min:$sec");
 		}
 	}
 	
-	public function get_day_of_week(){
-		return date("N",$this->time);
-	}
-
 	public function get_year(){
 		return date("Y",$this->time);
 	}
 	
 	public function set_year($num){
-		$this->time = strtotime(date("$num-n-j H:i",$this->time));
+		$this->time = strtotime(date("$num-n-j H:i:s",$this->time));
 	}
 	
 	public function get_month(){
@@ -3227,7 +3223,7 @@ class Calendar {
 	}
 	
 	public function set_month($num){
-		$this->time = strtotime(date("Y-$num-j H:i",$this->time));
+		$this->time = strtotime(date("Y-$num-j H:i:s",$this->time));
 	}
 	
 	public function get_day(){
@@ -3235,7 +3231,7 @@ class Calendar {
 	}
 	
 	public function set_day($num){
-		$this->time = strtotime(date("Y-n-$num H:i",$this->time));		
+		$this->time = strtotime(date("Y-n-$num H:i:s",$this->time));		
 	}
 	
 	public function get_hour(){
@@ -3243,7 +3239,7 @@ class Calendar {
 	}
 	
 	public function set_hour($num){
-		$this->time = strtotime(date("Y-n-j $num:i",$this->time));
+		$this->time = strtotime(date("Y-n-j $num:i:s",$this->time));
 	}
 	
 	public function get_minute(){
@@ -3251,41 +3247,79 @@ class Calendar {
 	}
 	
 	public function set_minute($num){
-		$this->time = strtotime(date("Y-n-j H:$num",$this->time));
+		$this->time = strtotime(date("Y-n-j H:$num:s",$this->time));
+	}
+	
+	public function get_second(){
+		return date("s",$this->time);
+	}
+	
+	public function set_second($num){
+		$this->time = strtotime(date("Y-n-j H:i:$num",$this->time));
 	}
 	
 	public function inc_days($num){
 		$inc = $num>=0 ? " + ".$num." days" : " - ".abs($num)." days";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function inc_weeks($num){
 		$inc = $num>=0 ? " + ".$num." weeks" : " - ".abs($num)." weeks";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function inc_months($num){
 		$inc = $num>=0 ? " + ".$num." months" : " - ".abs($num)." months";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function inc_years($num){
 		$inc = $num>=0 ? " + ".$num." years" : " - ".abs($num)." years";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function inc_hours($num){
 		$inc = $num>=0 ? " + ".$num." hours" : " - ".abs($num)." hours";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function inc_minutes($num){
 		$inc = $num>=0 ? " + ".$num." minutes" : " - ".abs($num)." minutes";
-		$this->time = strtotime(date("Y-n-j H:i",$this->time).$inc);
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
+	}
+	
+	public function inc_seconds($num){
+		$inc = $num>=0 ? " + ".$num." seconds" : " - ".abs($num)." seconds";
+		$this->time = strtotime(date("Y-n-j H:i:s",$this->time).$inc);
 	}
 	
 	public function get_month_name(){
 		return date("F",$this->time);
+	}
+	
+	public function get_day_of_week(){
+		return date("N",$this->time);
+	}
+	
+	public function get_day_of_year(){
+		return (int)date("z",$this->time) + 1;
+	}
+
+	public function get_days_in_month(){
+		return (int)date("t",$this->time);
+	}
+	
+	public function get_days_in_year(){
+		return (bool)date("L") ? 366 : 365;
+	}
+	
+	public function get_week_of_year($weekstart){
+		$dow = (int)$this->get_day_of_week();
+		$doy = (int)$this->get_day_of_year();
+		$ys_dow = (($dow-1 + 7 - (($doy-1) % 7)) % 7) + 1; // day of week on jan 1
+		$ys_woff = ($ys_dow - $weekstart) % 7; // 0-based index into week that jan 1 is
+		$yw_start = $ys_woff<=3 ? -$ys_woff : 7-$ys_woff; // offset of first week
+		return (int)((($doy-1) - $yw_start) / 7) + 1;
 	}
 }
 
@@ -3341,7 +3375,7 @@ function generate_events($data){
 	$events = array();
 	
 	// recurring events
-	$max_recurring = 50;
+	$max_recurring = 1000;#50;
 	foreach($data->{"recurring-events"} as $item){
 		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
@@ -3367,23 +3401,168 @@ function generate_events($data){
 			$checksecs = array();
 			for($i=0;$i<60;$i++) array_push($checksecs,$i);
 		}
-		$start = $rec->start;
+		$start = $rec["start"];
 		$cal = new Calendar($start["year"]."-".$start["month"]."-".$start["day"]
 			." ".$start["hour"].":".$start["minute"].":".$start["second"]);
+		$startstamp = $cal->time;
+		if(isset($rec["end"])){
+			$end = $rec["end"];
+			$endcal = new Calendar($end["year"]."-".$end["month"]."-".$end["day"]
+				." ".$end["hour"].":".$end["minute"].":".$end["second"]);
+			$endstamp = $endcal->time;
+		}
+		$weekstart = $rec["week-start"];
+		$yearcount = 0;
+		$lastyear = $cal->get_year();
+		$monthcount = 0;
+		$lastmonth = $cal->get_month();
+		$weekcount = 0;
+		$lastweek = $cal->get_week_of_year($weekstart);
+		$daycount = 0;
+		$datecount = 0;
+		$dates = array();
 		while(TRUE){
-			// TODO
 			foreach($checkhours as $hour){
-				foreach($checkmins as $min){
-					foreach($checksecs as $sec){
+				foreach($checkmins as $minute){
+					foreach($checksecs as $second){
 						$cal->set_hour($hour);
 						$cal->set_minute($minute);
 						$cal->set_second($second);
-						// TODO
+						if($cal->time < $startstamp) continue;
+						if($cal->time > $endthres) break 4;
+						if(isset($end) && $cal->time > $endstamp) break 4;
+						if(isset($count) && $datecount >= $count) break 4;
+						if(sizeof($dates) >= $max_recurring) break 4;
+						
+						if(isset($rec["rules"]["year-month"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["year-month"] as $mo){
+								if($mo < 0) $mo = 12+1-$mo;								
+								if($cal->get_month() == $mo){
+									$matched = TRUE;
+									break;
+								}
+							}
+							if(!$matched) continue;
+						}
+						// TODO: year week
+						if(isset($rec["rules"]["year-day"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["year-day"] as $dy){
+								if($dy < 0) $dy = $cal->get_days_in_year()+1-$dy;
+								if($cal->get_day_of_year() == $dy){
+									$matched = TRUE;
+									break;
+								}
+							}
+							if(!$matched) continue;
+						}
+						// TODO: year week day
+						if(isset($rec["rules"]["month-day"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["month-day"] as $dy){
+								if($dy < 0) $dy = $cal->get_days_in_month()+1-$dy;
+								if($cal->get_day() == $dy){
+									$matched = TRUE;
+									break;
+								}
+							}
+							if(!$matched) continue;
+						}
+						// TODO: month week day
+						if(isset($rec["rules"]["day-hour"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["day-hour"] as $hr){
+								if($hr < 0) $hr = 23+1-$hr;
+								if($cal->get_hour() == $hr){
+									$matched = TRUE;
+									break;
+								}
+							}
+							if(!$matched) continue;
+						}
+						if(isset($rec["rules"]["hour-minute"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["hour-minute"] as $min){
+								if($min < 0) $min = 59+1-$min;
+								if($cal->get_minute() == $min){
+									$matched = TRUE;
+									break;
+								}
+							}
+						}
+						if(isset($rec["rules"]["minute-second"])){
+							$matched = FALSE;
+							foreach($rec["rules"]["minute-second"] as $sec){
+								if($sec < 0) $sec = 59+1-$sec;
+								if($cal->get_second() == $sec){
+									$matched = TRUE;
+									break;
+								}
+							}
+						}
+						if(isset($rec["rules"]["year-ival"])){
+							if($yearcount % $rec["rules"]["year-ival"] != 0){
+								continue;
+							}
+						}						
+						if(isset($rec["rules"]["month-ival"])){
+							if($monthcount % $rec["rules"]["month-ival"] != 0){
+								continue;
+							}							
+						}	
+						if(isset($rec["rules"]["week-ival"])){
+							if($weekcount % $rec["rules"]["week-ival"] != 0){
+								continue;
+							}							
+						}					
+						if(isset($rec["rules"]["day-ival"])){
+							if($daycount % $rec["rules"]["day-ival"] != 0){
+								continue;
+							}
+						}
+						if(isset($rec["rules"]["hour-ival"])){
+							if(($daycount*24+$hour) % $rec["rules"]["hour-ival"] != 0){
+								continue;
+							}
+						}
+						if(isset($rec["rules"]["minute-ival"])){
+							if(($daycount*24*60+$minute) % $rec["rules"]["minute-ival"] != 0){
+								continue;
+							}
+						}
+						if(isset($rec["rules"]["second-ival"])){
+							if(($daycount*24*60*60+$second) % $rec["rules"]["second-ival"] != 0){
+								continue;
+							}
+						}
+						// TODO: match index rules
+						$datecount ++;
+						if($cal->time >= $startthres && $cal->time < $endthres){
+							array_push($dates,$cal->time);
+						}
 					}
 				}
 			}
-		}
+			$cal->inc_days(1);
+			$daycount ++;
+			if($cal->get_week_of_year($weekstart) != $lastweek){
+				$weekcount ++;
+				$lastweek = $cal->get_week_of_year($weekstart);
+			}
+			if($cal->get_month() != $lastmonth){
+				$monthcount ++;
+				$lastmonth = $cal->get_month();
+			}
+			if($cal->get_year() != $lastyear){
+				$yearcount ++;
+				$lastyear = $cal->get_year();
+			}
+		} // end while
 		
+		foreach($dates as $date){
+			array_push($events,make_event($item, $date, $item->duration));
+		}
 	}
 	
 	// fixed events
@@ -3810,7 +3989,7 @@ $input_formats = array(
 	new LocalCsvInput(),
 	new NoInput()
 );
-/*
+
 $result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
@@ -3818,9 +3997,9 @@ if($result===FALSE){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
-*/
 
-class Foo extends ICalendarInputBase {
+
+/*class Foo extends ICalendarInputBase {
 	public function convert(){
 		$handle = @fopen("test.ics","r");
 		if($handle===FALSE) return "Couldn't open";
@@ -3834,4 +4013,4 @@ class Foo extends ICalendarInputBase {
 
 $f = new Foo();
 $result = $f->convert();
-var_dump($result);
+var_dump($result);*/
