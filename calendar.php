@@ -3235,7 +3235,7 @@ class Calendar {
 	}
 	
 	public function get_hour(){
-		return date("h",$this->time);
+		return date("H",$this->time);
 	}
 	
 	public function set_hour($num){
@@ -3305,6 +3305,21 @@ class Calendar {
 		return (int)date("z",$this->time) + 1;
 	}
 
+	public function get_week_of_year($weekstart){
+		$doy = (int)$this->get_day_of_year();
+		$ys_woff = $this->get_year_start_week_offset($weekstart);
+		$yw_start = $ys_woff<=3 ? -$ys_woff : 7-$ys_woff; // offset of first week
+		return (int)((($doy-1) - $yw_start) / 7) + 1;
+	}
+
+	// 0-based index into week that jan 1 is
+	private function get_year_start_week_offset($weekstart){
+		$dow = (int)$this->get_day_of_week();
+		$doy = (int)$this->get_day_of_year();
+		$ys_dow = (($dow-1 + 7 - (($doy-1) % 7)) % 7) + 1; // day of week on jan 1
+		return ($ys_dow - $weekstart) % 7; 
+	}
+
 	public function get_days_in_month(){
 		return (int)date("t",$this->time);
 	}
@@ -3313,13 +3328,12 @@ class Calendar {
 		return (bool)date("L") ? 366 : 365;
 	}
 	
-	public function get_week_of_year($weekstart){
-		$dow = (int)$this->get_day_of_week();
-		$doy = (int)$this->get_day_of_year();
-		$ys_dow = (($dow-1 + 7 - (($doy-1) % 7)) % 7) + 1; // day of week on jan 1
-		$ys_woff = ($ys_dow - $weekstart) % 7; // 0-based index into week that jan 1 is
-		$yw_start = $ys_woff<=3 ? -$ys_woff : 7-$ys_woff; // offset of first week
-		return (int)((($doy-1) - $yw_start) / 7) + 1;
+	public function get_weeks_in_year($weekstart){
+		$ys_woff = $this->get_year_start_week_offset($weekstart);
+		$days = $this->get_days_in_year() - $ys_woff;
+		$full_weeks = floor($days / 7);
+		$days_left = $days % 7;
+		return $full_weeks + ($days_left>=4 ? 1 : 0);
 	}
 }
 
@@ -3375,7 +3389,7 @@ function generate_events($data){
 	$events = array();
 	
 	// recurring events
-	$max_recurring = 1000;#50;
+	$max_recurring = 5000;#50;
 	foreach($data->{"recurring-events"} as $item){
 		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
@@ -3402,13 +3416,13 @@ function generate_events($data){
 			for($i=0;$i<60;$i++) array_push($checksecs,$i);
 		}
 		$start = $rec["start"];
-		$cal = new Calendar($start["year"]."-".$start["month"]."-".$start["day"]
-			." ".$start["hour"].":".$start["minute"].":".$start["second"]);
+		$cal = new Calendar($start["year"],$start["month"],$start["day"],
+			$start["hour"],$start["minute"],$start["second"]);
 		$startstamp = $cal->time;
 		if(isset($rec["end"])){
 			$end = $rec["end"];
-			$endcal = new Calendar($end["year"]."-".$end["month"]."-".$end["day"]
-				." ".$end["hour"].":".$end["minute"].":".$end["second"]);
+			$endcal = new Calendar($end["year"],$end["month"],$end["day"],
+				$end["hour"],$end["minute"],$end["second"]);
 			$endstamp = $endcal->time;
 		}
 		$weekstart = $rec["week-start"];
@@ -3428,7 +3442,7 @@ function generate_events($data){
 						$cal->set_hour($hour);
 						$cal->set_minute($minute);
 						$cal->set_second($second);
-						if($cal->time < $startstamp) continue;
+						if($cal->time <= $startstamp) continue;
 						if($cal->time > $endthres) break 4;
 						if(isset($end) && $cal->time > $endstamp) break 4;
 						if(isset($count) && $datecount >= $count) break 4;
@@ -3445,7 +3459,16 @@ function generate_events($data){
 							}
 							if(!$matched) continue;
 						}
-						// TODO: year week
+						if(isset($rec["rules"]["year-week"])){
+							foreach($rec["rules"]["year-week"] as $yw){							
+								if($yw < 0) $yw = $cal->get_weeks_in_year()+1-$yw;
+								if($cal->get_week_of_year() == $yw){
+									$matched = TRUE;
+									break;
+								}
+							}
+							if(!$matched) continue;
+						}
 						if(isset($rec["rules"]["year-day"])){
 							$matched = FALSE;
 							foreach($rec["rules"]["year-day"] as $dy){
@@ -3527,12 +3550,12 @@ function generate_events($data){
 							}
 						}
 						if(isset($rec["rules"]["minute-ival"])){
-							if(($daycount*24*60+$minute) % $rec["rules"]["minute-ival"] != 0){
+							if(($daycount*24*60 + $hour*60 + $minute) % $rec["rules"]["minute-ival"] != 0){
 								continue;
 							}
 						}
 						if(isset($rec["rules"]["second-ival"])){
-							if(($daycount*24*60*60+$second) % $rec["rules"]["second-ival"] != 0){
+							if(($daycount*24*60*60 + $hour*60*60 + $minute*60 + $second) % $rec["rules"]["second-ival"] != 0){
 								continue;
 							}
 						}
