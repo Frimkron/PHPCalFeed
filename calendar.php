@@ -3336,12 +3336,14 @@ class Calendar {
 		return $full_weeks + ($days_left>=4 ? 1 : 0);
 	}
 	
-	public function get_xdays_in_year($dayofweek){
-		return $this->getxdays_in_period($dayofweek,$this->get_days_in_year(),$this->get_day_of_year());
+	public function get_xdays_in_year($dayofweek,$uptoinc=999){
+		return $this->get_xdays_in_period($dayofweek,min($this->get_days_in_year(),$uptoinc),
+			$this->get_day_of_year());
 	}
 	
-	public function get_xdays_in_month($dayofweek){
-		return $this->get_xdays_in_period($dayofweek,(int)$this->get_days_in_month(),(int)$this->get_day());
+	public function get_xdays_in_month($dayofweek,$uptoinc=999){
+		return $this->get_xdays_in_period($dayofweek,min((int)$this->get_days_in_month(),$uptoinc),
+			(int)$this->get_day());
 	}
 	
 	private function get_xdays_in_period($xday,$plength,$pday){
@@ -3448,10 +3450,10 @@ function generate_events($data){
 		$weekcount = 0;
 		$lastweek = $cal->get_week_of_year($weekstart);
 		$daycount = 0;
-		$monthxdaynums = array(1=>0,2=>0,3=>0,4=>0,5=>0,6=>0,7=>0);
-		$monthxdaynums[$cal->get_day_of_week()] ++;
-		$yearxdaynums = array(1=>0,2=>0,3=>0,4=>0,5=>0,6=>0,7=>0);
-		$yearxdaynums[$cal->get_day_of_week()] ++;
+		$monthxdaynums = array();
+		for($i=1;$i<=7;$i++) $monthxdaynums[$i] = $cal->get_xdays_in_month($i,$cal->get_day());
+		$yearxdaynums = array();
+		for($i=1;$i<=7;$i++) $yearxdaynums[$i] = $cal->get_xdays_in_year($i,$cal->get_day_of_year());
 		$datecount = 0;
 		$dates = array();
 		while(TRUE){
@@ -3571,6 +3573,7 @@ function generate_events($data){
 									break;
 								}
 							}
+							if(!$matched) continue;
 						}
 						if(isset($rec["rules"]["minute-second"])){
 							$matched = FALSE;
@@ -3581,6 +3584,7 @@ function generate_events($data){
 									break;
 								}
 							}
+							if(!$matched) continue;
 						}
 						if(isset($rec["rules"]["year-ival"])){
 							if($yearcount % $rec["rules"]["year-ival"] != 0){
