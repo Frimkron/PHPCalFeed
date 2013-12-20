@@ -1,13 +1,13 @@
 <?php
 
 // TODO: icalendar recurring events
-//		TODO: frequency of hourly minutely or secondly doesnt fit into increment-day pattern
-//		have rrule parser return internal format		
+//		need better way to handle incrementing from start time
 //		have event generator use internal format
 //		have recurrence parser return internal format
 // TODO: json output is broken
 // TODO: expiration timestamp should be start of day
 // TODO: update readme
+// TODO: webcal:// in readme
 // TODO: test output in different timezone
 // TODO: facebook input
 //		feasible using oath?
@@ -1643,7 +1643,7 @@ class RecurrenceParser {
 	// D -> '[0-9]{4}-[0-9]{2}-[0-9]{2}'
 	// N -> '[0-9]+'		
 	
-	public function parse($input){
+	public function parse($input,$time){
 		$pos = 0;
 		$result = $this->parse_EdOrEwOrEmOrEy($input,$pos);
 		if($result===FALSE) return FALSE;
@@ -1655,16 +1655,56 @@ class RecurrenceParser {
 		$week = $result["week"];
 		$month = $result["month"];
 		if($this->expect_end($input,$pos)===FALSE) return FALSE;
-		$retval = new StdClass();
-		$retval->type = $type;
-		$retval->frequency = $freq;
-		$retval->start = $start;
-		$retval->day = $day;
-		$retval->week = $week;
-		$retval->month = $month;
+
+		$startdt = new DateTime($start);
+		$retval = array( 
+			"start" => array(
+				"year"=>(int)$startdt->format("Y"),
+				"month"=>(int)$startdt->format("n"),
+				"day"=>(int)$startdt->format("j"),
+				"hour"=>(int)$startdt->format("G"),
+				"minute"=>(int)$startdt->format("i"),
+				"second"=>(int)$startdt->format("s")
+			),
+			"week-start" => 1,
+			"rules" => array(
+				"day-hour" => $time["hour"],
+				"hour-minute" => $time["minute"],
+				"minute-second" => $time["second"]
+			)
+		);
+		switch($type){
+			case "daily":	
+				$retval["rules"]["day-ival"] = $freq;	
+				break;
+			case "weekly":	
+				$retval["rules"]["week-ival"] = $freq; 	
+				$retval["rules"]["year-week-day"] = array( array( "day"=>$day ) );
+				break;
+			case "montly":	
+				$retval["rules"]["month-ival"] = $freq;	
+				if($week != 0){
+					$retval["rules"]["month-week-day"] = array( array( "day"=>$day, "number"=>$week ) );
+				}else{
+					$retval["rules"]["month-day"] = array( $day );
+				}
+				break;
+			case "yearly":	
+				$retval["rules"]["year-ival"] = $freq;	
+				if($week != 0 && $month!= 0){
+					$retval["rules"]["month-week-day"] = array( array( "day"=>$day, "number"=>$week ) );
+					$retval["rules"]["year-month"] = array( $month );
+				}elseif($month!=0){
+					$retval["rules"]["month-day"] = array( $day );
+					$retval["rules"]["year-month"] = array( $month );
+				}elseif($week!=0){
+					$retval["rules"]["year-week-day"] = array( array( "day"=>$day, "number"=>$week ) );
+				}else{
+					$retval["rules"]["year-day"] = array( $day );
+				}
+				break;
+		}
 		return $retval;
-		
-		// TODO: come up with internal recurrence format and have this and rrule parser both return it
 	}
 	
 	private function parse_EdOrEwOrEmOrEy($input,$pos){
@@ -3401,12 +3441,16 @@ function make_event($eventinfo,$starttime,$duration){
 
 function generate_events($data){
 
-	$startthres = time();
-	$endthres = time() + 2*365*24*60*60;
+	$cal = new Calendar(time());
+	$cal->set_hour(0);
+	$cal->set_minute(0);
+	$cal->set_second(0);
+	$startthres = $cal->time;
+	$endthres = $startthres + 2*365*24*60*60;
 	$events = array();
 	
 	// recurring events
-	$max_recurring = 5000;#50;
+	$max_recurring = 1000;
 	foreach($data->{"recurring-events"} as $item){
 		if(sizeof($events) >= $max_recurring) break;
 		$rec = $item->recurrence;
