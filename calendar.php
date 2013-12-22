@@ -1,10 +1,11 @@
 <?php
 
 // TODO: icalendar recurring events
+//		negative BYSETPOS not working yet
+//		match counts should disregard start time
+//		handle rdate, exdate and exrule
+//		handle multiple rrules and exrules
 //		need better way to handle incrementing from start time
-//		have event generator use internal format
-//		have recurrence parser return internal format
-// TODO: json output is broken
 // TODO: expiration timestamp should be start of day
 // TODO: update readme
 // TODO: webcal:// in readme
@@ -22,6 +23,7 @@
 // TODO: eventbrite input
 //		api requires oauth?
 //		can user create application token and generate user token for it
+// TODO: Filename in config for local files
 // TODO: Outlook CSV export
 // TODO: Yahoo Calendar CSV export
 // TODO: easy-subscribe widgit
@@ -34,6 +36,11 @@
 // TODO: web-based UI for config
 // TODO: web-based UI input
 // TODO: page-scraping input
+//		given page url
+//		use page meta title and description, use page url
+//		css classes for event and indiv property elements?
+//		xpath? *[class='vevent']
+// TODO: hcalendar input
 // TODO: icalendar proper timezone construction
 // TODO: icalendar disallows zero events
 // TODO: responsive design for html
@@ -49,21 +56,14 @@ abstract class InputFormat {
 		url
 		events	
 			name (required)
-			year (required)
-			month (required)
-			day (required)
-			hour
-			minute
-			second
+			date (required) (year,month,day)
+			time (hour, minute, second)
 			duration (days,hours,minutes,seconds)
 			description
 			url			
 		recurring-events
 			name (required)
 			recurrence (required) (start,[end],[count],week-start,rules)
-			hour
-			minute
-			second
 			duration (days,hours,minutes,seconds)
 			description
 			url				*/
@@ -153,12 +153,8 @@ abstract class ICalendarInputBase extends InputFormat {
 				}
 				$starttime = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
 				if(is_string($starttime)) return $starttime;
-				$eventobj->year = $starttime["year"];
-				$eventobj->month = $starttime["month"];
-				$eventobj->day = $starttime["day"];
-				$eventobj->hour = $starttime["hour"];
-				$eventobj->minute = $starttime["minute"];
-				$eventobj->second = $starttime["second"];
+				$eventobj->date = array( "year"=>$starttime["year"], "month"=>$starttime["month"], "day"=>$starttime["day"] );
+				$eventobj->time = array( "hour"=>$starttime["hour"], "minute"=>$starttime["minute"], "second"=>$starttime["second"] );
 				
 				if(isset($vevent["properties"]["duration"])){
 					// duration specified
@@ -352,11 +348,7 @@ abstract class ICalendarInputBase extends InputFormat {
 			$result["rules"]["year-month"] = $rrule["bymonth"];
 		}
 		if(isset($rrule["bysetpos"])){
-			$poses = array();
-			foreach($rrule["bysetpos"] as $setpos){
-				// -1 because dtstart isn't included for internal format
-				array_push($poses,$setpos>0 ? $setpos-1 : $setpos);
-			}
+			$poses = $rrule["bysetpos"];
 			switch($rrule["freq"]){
 				case "yearly":   $result["rules"]["year-match"] = $poses;   break;
 				case "monthly":  $result["rules"]["month-match"] = $poses;  break;
@@ -531,30 +523,27 @@ abstract class CsvInputBase extends InputFormat {
 			if(strlen($ename)==0) return "CSV: Missing 'name' value";
 			$event->name = $ename;
 			
-			$edate = trim($row[$colmap["date"]]);
-			if(strlen($edate)==0) return "CSV: Missing 'date' value";
-			if(preg_match("/^\d{4}-\d{2}-\d{2}$/",$edate)){
-				$bits = explode("-",$edate);
-				$event->year = $bits[0];
-				$event->month = $bits[1];
-				$event->day = $bits[2];
-			}else{
-				$parser = new RecurrenceParser();
-				$edate = $parser->parse(strtolower($edate));
-				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
-				$event->recurrence = $edate;
-			}
-			
 			$etime = "";
 			if(array_key_exists("time",$colmap)){
 				$etime = trim($row[$colmap["time"]]);
 			}
 			if(strlen($etime)==0) $etime = "00:00";
-			if(!preg_match("/^\d{2}:\d{2}$/",$etime)) return "CSV: Invalid time format - expected 'hh:mm'";
+			if(!preg_match("/^\d{1,2}:\d{2}$/",$etime)) return "CSV: Invalid time format - expected 'hh:mm'";
 			$bits = explode(":",$etime);
-			$event->hour = $bits[0];
-			$event->minute = $bits[1];
-			$event->second = 0;
+			$time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+			
+			$edate = trim($row[$colmap["date"]]);
+			if(strlen($edate)==0) return "CSV: Missing 'date' value";
+			if(preg_match("/^\d{4}-\d{1,2}-\d{1,2}$/",$edate)){
+				$bits = explode("-",$edate);
+				$event->date = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
+				$event->time = $time;
+			}else{
+				$parser = new RecurrenceParser();
+				$edate = $parser->parse(strtolower($edate),$time);
+				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
+				$event->recurrence = $edate;
+			}
 			
 			$eduration = "";
 			if(array_key_exists("duration",$colmap)){
@@ -683,18 +672,6 @@ abstract class JsonInputBase extends InputFormat {
 				if(!isset($item->name)){
 					return "JSON: Missing event name";
 				}
-				$date_pattern = "/^\d{4}-\d{2}-\d{2}$/";
-				if(!isset($item->date)){
-					return "JSON: Missing event date";
-				}
-				if(!preg_match("/^\d{4}-\d{2}-\d{2}$/",$item->date)){
-					return "JSON: Invalid date format - expected \"yyyy-mm-dd\"";
-				}
-				$bits = explode("-",$item->date);
-				$item->year = $bits[0];
-				$item->month = $bits[1];
-				$item->day = $bits[2];
-				unset($item->date);			
 				if(!isset($item->time)){
 					$item->time = "00:00";
 				}
@@ -702,10 +679,16 @@ abstract class JsonInputBase extends InputFormat {
 					return "JSON: Invalid time format - expected \"hh:mm\"";
 				}
 				$bits = explode(":",$item->time);
-				$item->hour = $bits[0];
-				$item->minute = $bits[1];
-				$item->second = 0;
-				unset($item->time);
+				$item->time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+				$date_pattern = "/^\d{4}-\d{1,2}-\d{1,2}$/";
+				if(!isset($item->date)){
+					return "JSON: Missing event date";
+				}
+				if(!preg_match("/^\d{4}-\d{1,2}-\d{1,2}$/",$item->date)){
+					return "JSON: Invalid date format - expected \"yyyy-mm-dd\"";
+				}
+				$bits = explode("-",$item->date);
+				$item->date = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
 				if(!isset($item->duration)){
 					$item->duration = "1d";
 				}
@@ -727,13 +710,11 @@ abstract class JsonInputBase extends InputFormat {
 				if(!isset($item->time)){
 					$item->time = "00:00";
 				}
-				if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
+				if(!preg_match("/^\d{1,2}:\d{2}$/",$item->time)){
 					return "JSON: Invalid time format - expected \"hh:mm\"";
 				}
 				$bits = explode(":",$item->time);
-				$item->hour = $bits[0];
-				$item->minute = $bits[1];
-				$item->second = 0;
+				$time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
 				unset($item->time);
 				if(!isset($item->duration)){
 					$item->duration = "1d";
@@ -747,7 +728,7 @@ abstract class JsonInputBase extends InputFormat {
 					return "JSON: Missing event recurrence";
 				}
 				$parser = new RecurrenceParser();
-				$result = $parser->parse(strtolower($item->recurrence));
+				$result = $parser->parse(strtolower($item->recurrence,$time));
 				if($result===FALSE){
 					return "JSON: Invalid event recurrence syntax";
 				}
@@ -832,23 +813,33 @@ class RemoteJsonInput extends JsonInputBase {
 
 abstract class OutputFormat {
 
+	/*	name
+		description
+		url
+		events	
+			name (required)
+			start-time (required)
+			end-time (required)
+			description
+			url					*/
+
 	public abstract function write_file_if_possible($scriptname,$data);
 
-	public abstract function attempt_handle_include($scriptname,$output_formats,$input_formats);
+	public abstract function attempt_handle_include($scriptname,$output_formats,$input_formats,$params);
 
-	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats);
+	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params);
 	
-	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats);
+	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params);
 
 	protected abstract function get_filename($scriptname);
 	
-	protected abstract function output($scriptname);
+	protected abstract function output($scriptname,$params);
 
-	protected function handle($scriptname,$output_formats,$input_formats){
+	protected function handle($scriptname,$output_formats,$input_formats,$params){
 		$filename = $this->get_filename($scriptname);
 		$error = update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats);
 		if($error) return $error;
-		$error = $this->output($scriptname);
+		$error = $this->output($scriptname,$params);
 		if($error) return $error;
 	}
 
@@ -1104,18 +1095,18 @@ abstract class HtmlOutputBase extends OutputFormat {
 
 class HtmlFullOutput extends HtmlOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="html") return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/html"))) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($name){
@@ -1167,7 +1158,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 		}
 	}
 		
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		header("Content-Type: text/html; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
@@ -1178,18 +1169,18 @@ class HtmlFullOutput extends HtmlOutputBase {
 
 class HtmlFragOutput extends HtmlOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		$result = $this->handle($scriptname,$output_formats,$input_formats);
 		// echo rather than return, to avoid 500 response from include
 		if($result) echo $result;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="html-frag") return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 
@@ -1205,7 +1196,7 @@ class HtmlFragOutput extends HtmlOutputBase {
  		$doc->saveHTMLFile($this->get_filename($scriptname)); 
 	}
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
@@ -1232,20 +1223,20 @@ abstract class JsonOutputBase extends OutputFormat {
 
 class JsonOutput extends JsonOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="json") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/json","text/json"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($scriptname){
@@ -1264,7 +1255,7 @@ class JsonOutput extends JsonOutputBase {
 		fclose($handle);
 	}
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		header("Content-Type: application/json; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
@@ -1275,24 +1266,24 @@ class JsonOutput extends JsonOutputBase {
 
 class JsonpOutput extends JsonOutputBase {
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="jsonp") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/javascript","text/javascript"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($scriptname){
-		return $scriptname.".js";	
+		return $scriptname.".json";	
 	}
 	
 	public function write_file_if_possible($scriptname,$data){
@@ -1303,35 +1294,40 @@ class JsonpOutput extends JsonOutputBase {
 		if($handle === FALSE){
 			return "Failed to open ".$filename." for writing";
 		}
-		fwrite($handle,"calendar_data(");
 		$this->write_to_stream($handle,$data);
-		fwrite($handle,")");
 		fclose($handle);
 	}
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
+		if(!isset($params["callback"]) || strlen(trim($params["callback"]))==0){
+			$callback = "receive_calendar_data";
+		}else{
+			$callback = trim($params["callback"]);
+		}
 		header("Content-Type: application/javascript; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
+		echo "$callback(";
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
+		echo ");";
 	}
 }
 
 class ICalendarOutput extends OutputFormat {
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="icalendar") return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/calendar"))) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($name){
@@ -1393,7 +1389,7 @@ class ICalendarOutput extends OutputFormat {
 		fclose($handle);
 	}
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		header("Content-Type: text/calendar; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE){
@@ -1408,20 +1404,20 @@ class RssOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="rss") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/rss+xml","application/rss"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($scriptname){
@@ -1498,7 +1494,7 @@ class RssOutput extends OutputFormat {
 		}
 	}
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		header("Content-Type: application/rss+xml; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
@@ -1513,20 +1509,20 @@ class XmlOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats){
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;	
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="xml") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats){
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/xml","application/xml"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats);
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
 	protected function get_filename($scriptname){
@@ -1612,7 +1608,7 @@ class XmlOutput extends OutputFormat {
 		}
 	}	
 	
-	public function output($scriptname){
+	public function output($scriptname,$params){
 		header("Content-Type: application/xml; charset=".character_encoding_of_output());
 		$filename = $this->get_filename($scriptname);
 		if( @readfile($filename) === FALSE ){
@@ -1640,7 +1636,7 @@ class RecurrenceParser {
 	// Nt -> N ('th'|'st'|'nd'|'rd')
 	// Wn -> 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
 	// Mn -> 'jan' | 'feb' | 'mar' | 'apr' | 'may' | 'jun' | 'jul' | 'aug' | 'sep' | 'oct' | 'nov' | 'dec'
-	// D -> '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+	// D -> '[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}'
 	// N -> '[0-9]+'		
 	
 	public function parse($input,$time){
@@ -1656,7 +1652,7 @@ class RecurrenceParser {
 		$month = $result["month"];
 		if($this->expect_end($input,$pos)===FALSE) return FALSE;
 
-		$startdt = new DateTime($start);
+		$startdt = new DateTime("@".$start);
 		$retval = array( 
 			"start" => array(
 				"year"=>(int)$startdt->format("Y"),
@@ -1668,9 +1664,9 @@ class RecurrenceParser {
 			),
 			"week-start" => 1,
 			"rules" => array(
-				"day-hour" => $time["hour"],
-				"hour-minute" => $time["minute"],
-				"minute-second" => $time["second"]
+				"day-hour" => array( $time["hour"] ),
+				"hour-minute" => array( $time["minute"] ),
+				"minute-second" => array( $time["second"] )
 			)
 		);
 		switch($type){
@@ -1681,7 +1677,7 @@ class RecurrenceParser {
 				$retval["rules"]["week-ival"] = $freq; 	
 				$retval["rules"]["year-week-day"] = array( array( "day"=>$day ) );
 				break;
-			case "montly":	
+			case "monthly":	
 				$retval["rules"]["month-ival"] = $freq;	
 				if($week != 0){
 					$retval["rules"]["month-week-day"] = array( array( "day"=>$day, "number"=>$week ) );
@@ -2340,13 +2336,16 @@ class RecurrenceParser {
 		}
 		for($j=0; $j<2; $j++){
 			$result = $this->expect($input,$pos,"-");
+			$buffer .= "-";
 			if($result===FALSE) return FALSE;
-			for($i=0; $i<2; $i++){
-				$result = $this->parse_digit($input,$pos);
-				if($result===FALSE) return FALSE;
-				$pos = $result["pos"];
-				$buffer .= $result["value"];
-			}
+			$result = $this->parse_digit($input,$pos);
+			if($result===FALSE) return FALSE;
+			$pos = $result["pos"];
+			$buffer .= $result["value"];
+			$result = $this->parse_digit($input,$pos);
+			if($result===FALSE) continue; // second digit is optional
+			$pos = $result["pos"];
+			$buffer .= $result["value"];
 		}
 		$date = strtotime($buffer);
 		return array( "pos"=>$pos, "date"=>$date );
@@ -3486,6 +3485,9 @@ function generate_events($data){
 				$end["hour"],$end["minute"],$end["second"]);
 			$endstamp = $endcal->time;
 		}
+		if(isset($rec["count"])){
+			$count = $rec["count"];
+		}
 		$weekstart = $rec["week-start"];
 		$yearcount = 0;
 		$lastyear = $cal->get_year();
@@ -3497,7 +3499,15 @@ function generate_events($data){
 		$monthxdaynums = array();
 		for($i=1;$i<=7;$i++) $monthxdaynums[$i] = $cal->get_xdays_in_month($i,$cal->get_day());
 		$yearxdaynums = array();
-		for($i=1;$i<=7;$i++) $yearxdaynums[$i] = $cal->get_xdays_in_year($i,$cal->get_day_of_year());
+		for($i=1;$i<=7;$i++) $yearxdaynums[$i] = $cal->get_xdays_in_year($i,$cal->get_day_of_year());		
+		$secmatchcounts = array();
+		$minmatchcounts = array();
+		$hourmatchcounts = array();
+		$daymatchcounts = array();
+		$weekmatchcounts = array();
+		$monthmatchcounts = array();
+		$yearmatchcounts = array();
+		$potentialdates = array();
 		$datecount = 0;
 		$dates = array();
 		while(TRUE){
@@ -3509,9 +3519,6 @@ function generate_events($data){
 						$cal->set_second($second);
 						if($cal->time <= $startstamp) continue;
 						if($cal->time > $endthres) break 4;
-						if(isset($end) && $cal->time > $endstamp) break 4;
-						if(isset($count) && $datecount >= $count) break 4;
-						if(sizeof($dates) >= $max_recurring) break 4;
 						
 						if(isset($rec["rules"]["year-month"])){
 							$matched = FALSE;
@@ -3665,11 +3672,40 @@ function generate_events($data){
 								continue;
 							}
 						}
-						// TODO: match index rules
-						$datecount ++;
-						if($cal->time >= $startthres && $cal->time < $endthres){
-							array_push($dates,$cal->time);
-						}
+						$date = array( "timestamp"=>$cal->time );
+						$key = (int)$cal->get_year();
+						if(!isset($yearmatchcounts[$key])) $yearmatchcounts[$key] = 0;
+						$date["yearmatch"] = $yearmatchcounts[$key] + 1;
+						$yearmatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_month();
+						if(!isset($monthmatchcounts[$key])) $monthmatchcounts[$key] = 0;
+						$date["monthmatch"] = $monthmatchcounts[$key] + 1;
+						$monthmatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_week_of_year($weekstart);
+						if(!isset($weekmatchcounts[$key])) $weekmatchcounts[$key] = 0;
+						$date["weekmatch"] = $weekmatchcounts[$key] + 1;
+						$weekmatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_month()."-".(int)$cal->get_day();
+						if(!isset($daymatchcounts[$key])) $daymatchcounts[$key] = 0;
+						$date["daymatch"] = $daymatchcounts[$key] + 1;
+						$daymatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_month()."-".(int)$cal->get_day()
+							."-".(int)$cal->get_hour();
+						if(!isset($hourmatchcounts[$key])) $hourmatchcounts[$key] = 0;
+						$date["hourmatch"] = $hourmatchcounts[$key] + 1;
+						$hourmatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_month()."-".(int)$cal->get_day()
+							."-".(int)$cal->get_hour()."-".(int)$cal->get_minute();
+						if(!isset($minmatchcounts[$key])) $minmatchcounts[$key] = 0;
+						$date["minmatch"] = $minmatchcounts[$key] + 1;
+						$minmatchcounts[$key] ++;
+						$key = (int)$cal->get_year()."-".(int)$cal->get_month()."-".(int)$cal->get_day()
+							."-".(int)$cal->get_hour()."-".(int)$cal->get_minute()."-".(int)$cal->get_second();
+						if(!isset($secmatchcounts[$key])) $secmatchcounts[$key] = 0;
+						$date["secmatch"] = $secmatchcounts[$key] + 1;
+						$secmatchcounts[$key] ++;
+						
+						array_push($potentialdates, $date);
 					}
 				}
 			}
@@ -3685,6 +3721,120 @@ function generate_events($data){
 				for($i=1;$i<=7;$i++) $monthxdaynums[$i] = 0;
 			}
 			if($cal->get_year() != $lastyear){
+			
+				foreach($potentialdates as $date){
+					if(isset($end) && $date["timestamp"] > $endstamp) break 2;
+					if(isset($count) && $datecount >= $count) break 2;
+					if(sizeof($dates) >= $max_recurring) break 2;
+					
+					$tempcal = new Calendar($date["timestamp"]);
+					
+					if(isset($rec["rules"]["year-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year();
+						foreach($rec["rules"]["year-match"] as $ym){
+							if($ym < 0) $ym = $yearmatchcounts[$key]+1-$ym;
+							error_log("key $key, ym $ym, ".$date["yearmatch"]);
+							if($date["yearmatch"] == $ym){
+								$matched = TRUE;
+								break;
+							}
+						}
+						error_log("matched? $matched");
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["month-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_month();
+						foreach($rec["rules"]["month-match"] as $mm){
+							if($mm < 0) $mm = $monthmatchcounts[$key]+1-$mm;
+							if($date["monthmatch"] == $mm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["week-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_week_of_year($weekstart);
+						foreach($rec["rules"]["week-match"] as $wm){
+							if($wm < 0) $wm = $weekmatchcounts[$key]+1-$wm;
+							if($date["weekmatch"] == $wm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["day-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_month()
+							."-".$tempcal->get_day();
+						foreach($rec["rules"]["day-match"] as $dm){
+							if($dm < 0) $dm = $daymatchcounts[$key]+1-$dm;
+							if($date["daymatch"] == $dm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["hour-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_month()
+							."-".(int)$tempcal->get_day()."-".(int)$tempcal->get_hour();
+						foreach($rec["rules"]["hour-match"] as $hm){
+							if($hm < 0) $hm = $hourmatchcounts[$key]+1-$hm;
+							if($date["hourmatch"] == $hm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["minute-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_month()
+							."-".(int)$tempcal->get_day()."-".(int)$tempcal->get_hour()
+							."-".(int)$tempcal->get_minute();
+						foreach($rec["rules"]["minute-match"] as $mm){
+							if($mm < 0) $mm = $minmatchcounts[$key]+1-$mm;
+							if($date["minmatch"] == $mm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["second-match"])){
+						$matched = FALSE;
+						$key = (int)$tempcal->get_year()."-".(int)$tempcal->get_month()
+							."-".(int)$tempcal->get_day()."-".(int)$tempcal->get_hour()
+							."-".(int)$tempcal->get_minute()."-".(int)$tempcal->get_second();
+						foreach($rec["rules"]["second-match"] as $sm){
+							if($sm < 0) $sm = $secmatchcounts[$key]+1-$sm;
+							if($date["secmatch"] == $sm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					$datecount ++;
+					if($date["timestamp"] >= $startthres && $date["timestamp"] < $endthres){
+						array_push($dates,$date["timestamp"]);
+					}
+				}
+				$secmatchcounts = array();
+				$minmatchcounts = array();
+				$hourmatchcounts = array();
+				$daymatchcounts = array();
+				$weekmatchcounts = array();
+				$monthmatchcounts = array();
+				$yearmatchcounts = array();
+				$potentialdates = array();
+			
 				$yearcount ++;
 				$lastyear = $cal->get_year();
 				for($i=1;$i<=7;$i++) $yearxdaynums[$i] = 0;
@@ -3700,8 +3850,8 @@ function generate_events($data){
 	
 	// fixed events
 	foreach($data->events as $item){
-		$itemtime = strtotime($item->year."-".$item->month."-".$item->day
-				." ".$item->hour.":".$item->minute.":".$item->second);
+		$itemtime = strtotime($item->date["year"]."-".$item->date["month"]."-".$item->date["day"]
+				." ".$item->time["hour"].":".$item->time["minute"].":".$item->time["second"]);
 		if($itemtime >= $startthres && $itemtime < $endthres){
 			array_push($events,make_event($item, $itemtime, $item->duration));
 		}
@@ -3778,6 +3928,7 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats,$input
 	if($data===FALSE) return;          // not modified
 	
 	$data->events = generate_events($data);
+	unset($data->{"recurring-events"});
 	foreach($output_formats as $format){
 		$error = $format->write_file_if_possible($scriptname,$data);
 		if($error) return $error;
@@ -3789,7 +3940,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	// included from another script
 	if(basename(__FILE__) != basename($_SERVER["SCRIPT_FILENAME"])){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_include($scriptname,$output_formats,$input_formats);
+			$result = $format->attempt_handle_include($scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -3799,7 +3950,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	if(array_key_exists("format",$_GET)){
 		$formatname = $_GET["format"];
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats,$input_formats);
+			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -3821,7 +3972,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	arsort($acceptlist);
 	foreach($acceptlist as $accept => $quality){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats,$input_formats);
+			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
