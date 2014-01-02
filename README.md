@@ -15,20 +15,25 @@ of different formats including iCalendar, RSS, JSON and XML.
 ------
 
 Do you run a website with an events page? Does your site provide any kind of 
-feed for those events? If not, you might want to consider adding one. This 
+data feed for those events? If not, you might want to consider adding one. This
 allows users to have your events appear directly on their calendar as you 
 publish them, simplifying the process of discovering, making time for, and 
 attending your event.
 
-This script exists to make the addition to your website as easy as possible. 
-You provide the event information in a single file, and the script serves it up
-to visitors in multiple different feed formats.
+PHPCalFeed aims to make the addition of a calendar feed as easy as possible. It
+is the "swiss army knife" of calendar feed setup; simple to drop into your site
+and flexible enough to suit a wide variety of setups. You provide the event 
+information in a single file, and the script serves it up to visitors in 
+multiple different feed formats.
 
 
 2 Requirements
 --------------
 
-Requires a webserver serving PHP 5.
+* Requires a webserver serving PHP 5
+* Requires write permission to its directory on the webserver
+* PHP's JSON module is required for JSON input and output
+* PHP's XML DOM module is required for XML and XHTML output
 
 
 3 User Guide
@@ -47,13 +52,28 @@ FTP client, SCP client or similar:
 
 ### 3.2 Provide Event Info
 
-The script can read event info from a __CSV__ or __JSON__ file, the former 
-being the simpler option. Events can be one-off occurrences or recurring events
-which repeat on a schedule. See the following sections for how to prepare the 
-data file in your chosen format. 
+The script can read event info from a __CSV__, __JSON__ or __ICalendar__ file.
+CSV is the simplest of these options. Events can be one-off occurrences or 
+recurring events which repeat on a schedule. See the following sections for how
+to prepare the data file in your chosen format. 
 
-Once prepared, copy the file to your webserver into the same directory as the 
-`calendar.php` script. Delete the `calendar-config.php` file if it is present.
+#### 3.2.1 Local File
+
+To have PHPCalFeed read from a file on your own server, copy the file to your 
+webserver into the same directory as the `calendar.php` script. Delete the 
+`calendar-config.php` file if it is present.
+
+#### 3.2.2 Remote File
+
+As an alternative to a file on your own server, PHPCalFeed can read from a file
+on a different server. This is useful if you wish to use another calendar feed
+as the input, such as a public Google calendar. To use a remote file, create 
+the file `calendar-config.php` in the script directory, if it doesn't already 
+exist, and set define the `format` and `url` properties. `format` should be one
+of:
+* `csv-remote` - to use a CSV file
+* `json-remote` - to use a JSON file
+* `icalendar-remote` - to use an ICalendar file
 
 
 #### 3.2.1 CSV Input
