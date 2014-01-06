@@ -1,5 +1,6 @@
 <!--
   TODO: How to re-skin html
+  TODO: renaming calendar.php
 -->
 
 PHPCalFeed

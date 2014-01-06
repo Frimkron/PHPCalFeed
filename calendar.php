@@ -3,7 +3,6 @@
 // TODO: icalendar recurring events
 //		handle rdate, exdate and exrule
 //		handle multiple rrules and exrules
-//		need better way to handle incrementing from start time
 // TODO: test output in different timezone
 // TODO: facebook input
 //		feasible using oath?
@@ -42,6 +41,7 @@
 // TODO: responsive design for html
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
+// TODO: need better way to handle incrementing from start time
 
 
 
@@ -97,6 +97,118 @@ class NoInput extends InputFormat {
 		return $data;
 	}
 
+}
+
+abstract class HtmlInputBase extends InputFormat {
+
+	/*
+		name xpath
+		description xpath
+		url xpath
+		event xpath
+			name xpath
+			description xpath
+			start datetime xpath
+			start time xpath
+			duration xpath
+			end datetime xpath
+			end time xpath
+			url xpath
+		(no recurring)
+		Defaults to hcalendar spec
+	*/
+
+	private function el_with_class_xp($elname,$classname){
+		$classname = trim($classname);
+		return "$elname[contains(concat(' ',normalize-space(@class),' '),' $classname ')]";
+	}
+	
+	private function el_contents_with_class_xp($classname){
+		return $this->el_with_class_xp("img",$classname)."/@alt"
+			." | ".$this->el_with_class_xp("area",$classname)."/@alt"
+			." | ".$this->el_with_class_xp("data",$classname)."/@value"
+			." | ".$this->el_with_class_xp("abbr",$classname)."/@title"
+			." | ".$this->el_with_class_xp("*",$classname)."/text()";
+	}
+	
+	private function std_el_contents_with_class_xp($classname){
+		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
+			." | ".$this->el_contents_with_class_xp($classname);
+	}
+	
+	private function anchor_contents_with_class_xp($classname){
+		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
+			." | ".$this->el_with_class_xp("a",$classname)."/@href"
+			." | ".$this->el_contents_with_class_xp($classname);	
+	}
+	
+	private function date_contents_with_class_xp($classname){
+		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
+			." | ".$this->el_with_class_xp("del",$classname)."/@datetime"
+			." | ".$this->el_with_class_xp("ins",$classname)."/@datetime"
+			." | ".$this->el_with_class_xp("time",$classname)."/@datetime"
+			." | ".$this->el_contents_with_class_xp($classname);
+	}
+
+	protected function file_to_event_data($filehandle,$config){
+		$xp_event = "//".$this->el_with_class_xp("*","vcalendar"); // defines context element for event properties
+		$xp_summary = $this->std_el_contents_with_class_xp("summary");
+		$xp_description = $this->std_el_contents_with_class_xp("description");
+		$xp_url = $this->anchor_contents_with_class_xp("url");
+		$xp_dtstart = $this->date_contents_with_class_xp("dtstart");
+		$xp_dtend = $this->date_contents_with_class_xp("dtend");
+		$xp_duration = $this->std_el_contents_with_class_xp("duration");
+		if(isset($config["html-markers"])){
+			$markers = $config["html-markers"];
+			if(isset($markers["event-class"])) $xp_event = "//".$this->el_with_class_xp("*",$markers["event-class"]);
+			if(isset($markers["event-xpath"])) $xp_event = $markers["event-xpath"];
+			if(isset($markers["name-class"])) $xp_summary = $this->std_el_contents_with_class_xp($markers["name-class"]);
+			if(isset($markers["name-xpath"])) $xp_summary = $markers["name-xpath"];
+			if(isset($markers["description-class"])) $xp_description = $this->std_el_contents_with_class_xp($markers["description-class"]);
+			if(isset($markers["description-xpath"])) $xp_description = $markers["description-xpath"];
+			// TODO - rest of them
+		}
+		// TODO parse html
+		// TODO extract event elements
+		// TODO extract event properties
+	}
+
+}
+
+class LocalHtmlInput extends HtmlInputBase {
+	
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "html-local") return FALSE;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!file_exists($this->get_filename($scriptname))) return FALSE;
+		$result = write_config($scriptname,array("format"=>"html-local"));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	private function get_filename($scriptname){
+		return "$scriptname-master.html";
+	}
+
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$config){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
+		
+		$handle = @fopen($filename,"r");
+		if($handle === FALSE){
+			return "HTML: File '$filename' not found";
+		}
+		$data = $this->file_to_event_data($handle,$config);
+		fclose($handle);
+		return $data;
+	}
 }
 
 abstract class ICalendarInputBase extends InputFormat {
