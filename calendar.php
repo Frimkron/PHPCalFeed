@@ -117,6 +117,44 @@ abstract class HtmlInputBase extends InputFormat {
 		(no recurring)
 		Defaults to hcalendar spec
 	*/
+	
+	private $T_FRAC = ".[0-9]+";
+	private $T_hh = "(0?[1-9]|1[0-2])";
+	private $T_HH = "([01][0-9]|2[0-4])";
+	private $T_MERID = "[AaPp]\.?[Mm]\.?";
+	private $T_MM = "[0-5][0-9]";
+	private $T_ll = "[0-9][0-9]";
+	private $T_SPACE = "[ \\t]";
+	private $T_TZ = "(\(?[A-Za-z]{1,6}\)?|[A-Z][a-z]+([_\/][A-Z][a-z]+)+)";
+	private $T_TZC = "(GMT)?[+-]$T_hh:?($T_MM)?";
+	private $TIME_PATTERN = "(".implode("|",array(
+		$T_hh."(".$T_SPACE.")?".$T_MERID,
+		$T_hh."[.:]".$T_MM."(".$T_SPACE.")?".$T_MERID,
+		$T_hh."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?".$T_MERID,
+		$T_hh.":".$T_MM.":".$T_ll."[.:][0-9]+".$T_MERID,
+		"[Tt]?".$T_HH."[.:]".$T_MM,
+		"[Tt]?".$T_HH.$T_MM,
+		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll,
+		"[Tt]?".$T_HH.$T_MM.$T_ll,
+		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?(".$T_TZC."|".$T_TZ.")",
+		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll.$T_FRAC,
+		"(".$T_TZ."|".$T_TZC.")"
+	)).")";
+	private $DURATION_PATTERN = "(".implode("|",array(
+		// P 1Yr 4 days t 8m
+		"[Pp]?" . "\\s*" . "(\\d+\\s*[Yy](?:(?:ea)?rs?)?)?" . "\\s*" . "(\\d+\\s*[Mm](?:(?:on)?ths?)?)?"
+			. "\\s*" . "(\\d+\\s*[Ww](?:(?:ee)?ks?)?)?" . "\\s*" . "(\\d+\\s*[Dd](?:a?ys?)?)?" 
+			. "\\s*" "[Tt]?" . "\\s*" . "(\\d+\\s*[Hh](?:(?:ou)?rs?)?)?" 
+			. "\\s*" . "(\\d+\\s*[Mm](?:in(?:ute)?s?)?)?" . "\\s*" . "(\\d+\\s*[Ss](?:sec(?:ond)?s?)?)?",
+		// 0000-01-00 t 09:20
+		"[Pp]?" . "(\\d+)-(\\d+)-(\\d+)" . "\\s*" . "(?:" . "[Tt ]" . "\\s*" . "(\\d{2}):(\\d{2})(?:(:\\d{2}))" . ")",
+		// p 00:02:00
+		"[Pp]?" . "\\s*" . "[Tt]?" . "(\\d{2}):(\\d{2})(?:(:\\d{2}))"
+	)).")";
+	
+	protected function is_available(){
+		return extension_loaded("libxml") && extension_loaded("dom");
+	}
 
 	private function el_with_class_xp($elname,$classname){
 		$classname = trim($classname);
@@ -139,6 +177,7 @@ abstract class HtmlInputBase extends InputFormat {
 	private function anchor_contents_with_class_xp($classname){
 		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
 			." | ".$this->el_with_class_xp("a",$classname)."/@href"
+			." | ".$this->el_with_class_xp("link",$classname)."/@href"
 			." | ".$this->el_contents_with_class_xp($classname);	
 	}
 	
@@ -150,7 +189,62 @@ abstract class HtmlInputBase extends InputFormat {
 			." | ".$this->el_contents_with_class_xp($classname);
 	}
 
-	protected function file_to_event_data($filehandle,$config){
+	private function get_xpath_result($node,$context,$xpath){
+		$results = $context->query($xpath,$node);
+		if($results===FALSE) return "HTML: Bad XPath expression '$xpath'";
+		return $results;
+	}
+
+	private function resolve_xpath($node,$context,$xpath){
+		$results = $this->get_xpath_result($node,$context,$xpath);
+		foreach($results as $result){
+			$text = $result->nodeValue;
+			if(strlen(trim($text))==0) continue;
+			return $text;
+		}
+		return FALSE;
+	}
+	
+	private function resolve_date_xpath($node,$context,$xpath){
+		$date = NULL;
+		$time = NULL;
+		$results = $this->get_xpath_result($node,$context,$xpath);
+		foreach($results as $result){
+			$text = $result->nodeValue;
+			if(strlen(trim($text))==0) continue;
+			if(preg_match("/^\s*$TIME_PATTERN\s*$/",$text)){
+				// time without date found - always override existing time
+				// which may have been default from lack of time
+				$parsed = strtotime($text);
+				if($parsed===FALSE) continue;
+				$cal = new Calendar($parsed);
+				$time = array( 
+					"hour"=>(int)$cal->get_hour(), 
+					"minute"=>(int)$cal->get_minute(), 
+					"second"=>(int)$cal->get_second() );
+			}else{
+				$parsed = strtotime($text);
+				if($parsed)===FALSE) continue;
+				$cal = new Calendar($parsed);
+				$date = array(
+					"year"=>(int)$cal->get_year(),
+					"month"=>(int)$cal->get_month(),
+					"day"=>(int)$cal->get_day() );
+				// only override time if not found yet - it could be just
+				// the default
+				if($time!==NULL){
+					$time = array(
+						"hour"=>(int)$cal->get_hour(),
+						"minute"=>(int)$cal->get_minute(),
+						"second"=>(int)$cal->get_second() );
+				}
+			}
+		}
+		if($date===NULL || $time===NULL) return FALSE;
+		return array( "date"=>$date, "time"=>$time );
+	}
+	
+	protected function file_to_event_data($filename_or_url,$config){
 		$xp_event = "//".$this->el_with_class_xp("*","vcalendar"); // defines context element for event properties
 		$xp_summary = $this->std_el_contents_with_class_xp("summary");
 		$xp_description = $this->std_el_contents_with_class_xp("description");
@@ -166,9 +260,49 @@ abstract class HtmlInputBase extends InputFormat {
 			if(isset($markers["name-xpath"])) $xp_summary = $markers["name-xpath"];
 			if(isset($markers["description-class"])) $xp_description = $this->std_el_contents_with_class_xp($markers["description-class"]);
 			if(isset($markers["description-xpath"])) $xp_description = $markers["description-xpath"];
-			// TODO - rest of them
+			if(isset($markers["url-class"])) $xp_url = $this->anchor_contents_with_class_xp($markers["url-class"]);
+			if(isset($markers["url-xpath"])) $xp_url = $markers["url-xpath"];
+			if(isset($markers["start-class"])) $xp_dtstart = $this->date_contents_with_class_xp($markers["start-class"]);
+			if(isset($markers["start-xpath"])) $xp_dtstart = $markers["start-xpath"];
+			if(isset($markers["end-class"])) $xp_dtend = $this->date_contents_with_class_xp($markers["end-class"]);
+			if(isset($markers["end-xpath"])) $xp_dtend = $markers["end-xpath"];
+			if(isset($markers["duration-class"])) $xp_duration = $this->std_el_contents_with_class_xp($markers["duration-class"]);
+			if(isset($markers["duration-xpath"])) $xp_duration = $markers["duration-xpath"];
 		}
-		// TODO parse html
+		$doc = new DOMDocument();
+		@$doc->loadHTMLFile($filename_or_url);
+		if($doc===FALSE){
+			return "HTML: Could not open '$filename_or_url'";
+		}
+		$xpath = new DOMXPath($doc);
+		$event_els = $this->get_xpath_result($doc,$xpath,$xp_event);
+		if($event_els===FALSE) return "HTML: Bad XPath expression for events";
+		$data = new stdClass();
+		$data->events = array();
+		foreach($event_els as $event_el){
+			$event = new stdClass();
+			$name = $this->resolve_xpath($event_el,$xpath,$xp_summary);
+			if($name===FALSE) continue;
+			$event->name = $name;
+			$description = $this->resolve_xpath($event_el,$xpath,$xp_description);
+			if($description!==FALSE) $event->description = $description;
+			$url = $this->resolve_xpath($event_al,$xpath,$xp_url);
+			if($url!==FALSE) $event->url = $url;
+			$start = $this->resolve_date_xpath($event_el,$xpath,$xp_dtstart);
+			if($start===FALSE) continue;
+			$event->date = $start["date"];
+			$event->time = $start["time"];
+			$end = $this->resolve_date_xpath($event_el,$xpath,$xp_dtend);
+			if($end!==FALSE){
+				$event->duration = calc_approx_duration($event->date,$event->time,$end["date"],$end["time"]);
+			}else{
+				$duration = $this->resolve_xpath($event_el,$xpath,$xp_duration);
+				if($duration===FALSE) continue;
+				$event->duration = $duration;
+				// TODO: parse duration using crazy big regex
+			}
+			array_push($data->events,$event);
+		}
 		// TODO extract event elements
 		// TODO extract event properties
 	}
@@ -179,12 +313,14 @@ class LocalHtmlInput extends HtmlInputBase {
 	
 	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
 		if($formatname != "html-local") return FALSE;
+		if(!$this->is_available()) return FALSE;
 		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
 	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!$this->is_available()) return FALSE;
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
 		$result = write_config($scriptname,array("format"=>"html-local"));
 		if($result) return $result;
@@ -276,17 +412,14 @@ abstract class ICalendarInputBase extends InputFormat {
 						// start and end specified
 						$starttime = $this->convert_datetime($dtstart);
 						if(is_string($starttime)) return $starttime;
-						$startcal = new DateTime();
-						$startcal->setDate($starttime["year"],$starttime["month"],$starttime["day"]);
-						$startcal->setTime($starttime["hour"],$starttime["minute"],$starttime["second"]);
 						$endtime = $this->convert_datetime($vevent["properties"]["dtend"][0]);
 						if(is_string($endtime)) return $endtime;
-						$endcal = new DateTime();
-						$endcal->setDate($endtime["year"],$endtime["month"],$endtime["day"]);
-						$endcal->setTime($endtime["hour"],$endtime["minute"],$endtime["second"]);
-						$diff = $startcal->diff($endcal);
-						$eventobj->duration = array( "days" => $diff->y*365 + $diff->m*31 + $diff->d, //close enough :/
-								"hours" => $diff->h, "minutes" => $diff->i, "seconds" => $diff->s );					
+						$eventobj->duration = calc_approx_duration(
+							array($starttime["year"],$starttime["month"],$starttime["day"]),
+							array($starttime["hour"],$starttime["minute"],$starttime["second"]),
+							array($endtime["year"],$endtime["month"],$endtime["day"]),
+							array($endtime["hour"],$endtime["minute"],$endtime["second"])
+						);							
 					}elseif(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
 						// start specified as date
 						$eventobj->duration = array("days"=>1,"hours"=>0,"minutes"=>0, "seconds"=>0);
@@ -4032,6 +4165,23 @@ function inc_and_return_match_count(&$countarray,$yearkey,$unitkey){
 	if(!isset($countarray[$yearkey])) $countarray[$yearkey] = array();
 	if(!isset($countarray[$yearkey][$unitkey])) $countarray[$yearkey][$unitkey] = 0;
 	return ++$countarray[$yearkey][$unitkey];
+}
+
+// Gives an approximation of the duration between the two given datetimes, where 
+// each date is array( "year"=>y, "month"=>m, "day"=>d ),
+// each time is array( "hour"=>h, "minute"=>m, "second"=>s ),
+// and returned duration is array( "days"=>d, "hours"=>h, "minutes"=>m, "seconds"=>s )
+// Not accurate for periods over 1 day
+function calc_approx_duration($startdate,$starttime,$enddate,$endtime){
+	$start_dt = new DateTime();
+	$start_dt->setDate($startdate["year"],$startdate["month"],$startdate["day"]);
+	$start_dt->setTime($starttime["hour"],$starttime["minute"],$starttime["second"]);
+	$end_dt = new DateTime();
+	$end_dt->setDate($enddate["year"],$enddate["month"],$enddate["day"]);
+	$end_dt->setTime($endtime["hour"],$endtime["minute"],$endtime["second"]);
+	$diff = $start_dt->diff($end_dt);
+	return array( "days"=>round($diff->y*365.25 + $diff->m*30.5 + $diff->d),
+					"hours"=>$diff->h, "minutes"=>$diff->i, "seconds"=>$diff->s );
 }
 
 function get_config_filename($scriptname){
