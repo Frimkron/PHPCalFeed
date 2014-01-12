@@ -4,6 +4,8 @@
 //		handle rdate, exdate and exrule
 //		handle multiple rrules and exrules
 // TODO: test output in different timezone
+// TODO: event starting at midnight showing on day before in html
+// TODO: google calendar instructions in readme
 // TODO: facebook input
 //		feasible using oath?
 //		can user create application token and generate user token for it
@@ -118,39 +120,41 @@ abstract class HtmlInputBase extends InputFormat {
 		Defaults to hcalendar spec
 	*/
 	
-	private $T_FRAC = ".[0-9]+";
-	private $T_hh = "(0?[1-9]|1[0-2])";
-	private $T_HH = "([01][0-9]|2[0-4])";
-	private $T_MERID = "[AaPp]\.?[Mm]\.?";
-	private $T_MM = "[0-5][0-9]";
-	private $T_ll = "[0-9][0-9]";
-	private $T_SPACE = "[ \\t]";
-	private $T_TZ = "(\(?[A-Za-z]{1,6}\)?|[A-Z][a-z]+([_\/][A-Z][a-z]+)+)";
-	private $T_TZC = "(GMT)?[+-]$T_hh:?($T_MM)?";
-	private $TIME_PATTERN = "(".implode("|",array(
-		$T_hh."(".$T_SPACE.")?".$T_MERID,
-		$T_hh."[.:]".$T_MM."(".$T_SPACE.")?".$T_MERID,
-		$T_hh."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?".$T_MERID,
-		$T_hh.":".$T_MM.":".$T_ll."[.:][0-9]+".$T_MERID,
-		"[Tt]?".$T_HH."[.:]".$T_MM,
-		"[Tt]?".$T_HH.$T_MM,
-		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll,
-		"[Tt]?".$T_HH.$T_MM.$T_ll,
-		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?(".$T_TZC."|".$T_TZ.")",
-		"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll.$T_FRAC,
-		"(".$T_TZ."|".$T_TZC.")"
-	)).")";
-	private $DURATION_PATTERN = "(".implode("|",array(
-		// P 1Yr 4 days t 8m
-		"[Pp]?" . "\\s*" . "(\\d+\\s*[Yy](?:(?:ea)?rs?)?)?" . "\\s*" . "(\\d+\\s*[Mm](?:(?:on)?ths?)?)?"
-			. "\\s*" . "(\\d+\\s*[Ww](?:(?:ee)?ks?)?)?" . "\\s*" . "(\\d+\\s*[Dd](?:a?ys?)?)?" 
-			. "\\s*" "[Tt]?" . "\\s*" . "(\\d+\\s*[Hh](?:(?:ou)?rs?)?)?" 
-			. "\\s*" . "(\\d+\\s*[Mm](?:in(?:ute)?s?)?)?" . "\\s*" . "(\\d+\\s*[Ss](?:sec(?:ond)?s?)?)?",
-		// 0000-01-00 t 09:20
-		"[Pp]?" . "(\\d+)-(\\d+)-(\\d+)" . "\\s*" . "(?:" . "[Tt ]" . "\\s*" . "(\\d{2}):(\\d{2})(?:(:\\d{2}))" . ")",
-		// p 00:02:00
-		"[Pp]?" . "\\s*" . "[Tt]?" . "(\\d{2}):(\\d{2})(?:(:\\d{2}))"
-	)).")";
+	public function __construct(){	
+		$T_FRAC = "\\.[0-9]+";
+		$T_hh = "(0?[1-9]|1[0-2])";
+		$T_HH = "([01][0-9]|2[0-4])";
+		$T_MERID = "[AaPp]\\.?[Mm]\\.?";
+		$T_MM = "[0-5][0-9]";
+		$T_ll = "[0-9][0-9]";
+		$T_SPACE = "[ \\t]";
+		$T_TZ = "(\\(?[A-Za-z]{1,6}\\)?|[A-Z][a-z]+([_\/][A-Z][a-z]+)+)";
+		$T_TZC = "(GMT)?[+-]$T_hh:?($T_MM)?";
+		$this->TIME_PATTERN = "(".implode("|",array(
+			$T_hh."(".$T_SPACE.")?".$T_MERID,
+			$T_hh."[.:]".$T_MM."(".$T_SPACE.")?".$T_MERID,
+			$T_hh."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?".$T_MERID,
+			$T_hh.":".$T_MM.":".$T_ll."[.:][0-9]+".$T_MERID,
+			"[Tt]?".$T_HH."[.:]".$T_MM,
+			"[Tt]?".$T_HH.$T_MM,
+			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll,
+			"[Tt]?".$T_HH.$T_MM.$T_ll,
+			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?(".$T_TZC."|".$T_TZ.")",
+			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll.$T_FRAC,
+			"(".$T_TZ."|".$T_TZC.")"
+		)).")";
+		$this->DURATION_PATTERN = "(".implode("|",array(
+			// P 1Yr 4 days t 8m
+			"[Pp]?" . "\\s*" . "(?:(\\d+)\\s*[Yy](?:(?:ea)?rs?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Mm](?:(?:on)?ths?)?)?"
+				. "\\s*" . "(?:(\\d+)\\s*[Ww](?:(?:ee)?ks?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Dd](?:a?ys?)?)?" 
+				. "\\s*" . "[Tt]?" . "\\s*" . "(?:(\\d+)\\s*[Hh](?:(?:ou)?rs?)?)?" 
+				. "\\s*" . "(?:(\\d+)\\s*[Mm](?:in(?:ute)?s?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Ss](?:sec(?:ond)?s?)?)?",
+			// 0000-01-00 t 09:20
+			"[Pp]?" . "(\\d+)-(\\d+)-(\\d+)" . "\\s*" . "(?:" . "[Tt ]" . "\\s*" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?" . ")",
+			// p 00:02:00
+			"[Pp]?" . "\\s*" . "[Tt]?" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?"
+		)).")";
+	}
 	
 	protected function is_available(){
 		return extension_loaded("libxml") && extension_loaded("dom");
@@ -158,44 +162,45 @@ abstract class HtmlInputBase extends InputFormat {
 
 	private function el_with_class_xp($elname,$classname){
 		$classname = trim($classname);
-		return "$elname[contains(concat(' ',normalize-space(@class),' '),' $classname ')]";
+		return $elname."[contains(concat(' ',normalize-space(@class),' '),' $classname ')]";
 	}
 	
-	private function el_contents_with_class_xp($classname){
-		return $this->el_with_class_xp("img",$classname)."/@alt"
-			." | ".$this->el_with_class_xp("area",$classname)."/@alt"
-			." | ".$this->el_with_class_xp("data",$classname)."/@value"
-			." | ".$this->el_with_class_xp("abbr",$classname)."/@title"
-			." | ".$this->el_with_class_xp("*",$classname)."/text()";
+	private function el_contents_with_class_xp($prefix,$classname){
+		return $prefix.$this->el_with_class_xp("img",$classname)."/@alt"
+			." | ".$prefix.$this->el_with_class_xp("area",$classname)."/@alt"
+			." | ".$prefix.$this->el_with_class_xp("data",$classname)."/@value"
+			." | ".$prefix.$this->el_with_class_xp("abbr",$classname)."/@title"
+			." | ".$prefix.$this->el_with_class_xp("*",$classname)."//text()";
 	}
 	
 	private function std_el_contents_with_class_xp($classname){
-		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
-			." | ".$this->el_contents_with_class_xp($classname);
+		return $this->el_contents_with_class_xp(".//".$this->el_with_class_xp("*",$classname)."//","value")
+			." | ".$this->el_contents_with_class_xp(".//",$classname);	
 	}
 	
 	private function anchor_contents_with_class_xp($classname){
-		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
-			." | ".$this->el_with_class_xp("a",$classname)."/@href"
-			." | ".$this->el_with_class_xp("link",$classname)."/@href"
-			." | ".$this->el_contents_with_class_xp($classname);	
+		return $this->el_contents_with_class_xp(".//".$this->el_with_class_xp("*",$classname)."//","value")
+			." | ".".//".$this->el_with_class_xp("a",$classname)."/@href"
+			." | ".".//".$this->el_with_class_xp("link",$classname)."/@href"
+			." | ".$this->el_contents_with_class_xp(".//",$classname);		
 	}
 	
 	private function date_contents_with_class_xp($classname){
-		return "(".$this->el_with_class_xp("*",$classname)."//(".$this->el_contents_with_class_xp("value")."))"
-			." | ".$this->el_with_class_xp("del",$classname)."/@datetime"
-			." | ".$this->el_with_class_xp("ins",$classname)."/@datetime"
-			." | ".$this->el_with_class_xp("time",$classname)."/@datetime"
-			." | ".$this->el_contents_with_class_xp($classname);
+		return $this->el_contents_with_class_xp(".//".$this->el_with_class_xp("*",$classname)."//","value")
+			." | ".".//".$this->el_with_class_xp("del",$classname)."/@datetime"
+			." | ".".//".$this->el_with_class_xp("ins",$classname)."/@datetime"
+			." | ".".//".$this->el_with_class_xp("time",$classname)."/@datetime"
+			." | ".$this->el_contents_with_class_xp(".//",$classname);	
 	}
 
 	private function get_xpath_result($node,$context,$xpath){
 		$results = $context->query($xpath,$node);
+		// TODO: why is this not actually returning false?
 		if($results===FALSE) return "HTML: Bad XPath expression '$xpath'";
 		return $results;
 	}
 
-	private function resolve_xpath($node,$context,$xpath){
+	private function resolve_single_xpath($node,$context,$xpath){
 		$results = $this->get_xpath_result($node,$context,$xpath);
 		foreach($results as $result){
 			$text = $result->nodeValue;
@@ -205,69 +210,138 @@ abstract class HtmlInputBase extends InputFormat {
 		return FALSE;
 	}
 	
-	private function resolve_date_xpath($node,$context,$xpath){
-		$date = NULL;
-		$time = NULL;
+	private function resolve_concat_xpath($node,$context,$xpath){
+		$bits = array();
 		$results = $this->get_xpath_result($node,$context,$xpath);
 		foreach($results as $result){
 			$text = $result->nodeValue;
 			if(strlen(trim($text))==0) continue;
-			if(preg_match("/^\s*$TIME_PATTERN\s*$/",$text)){
-				// time without date found - always override existing time
-				// which may have been default from lack of time
+			array_push($bits,trim($text));
+		}
+		if(sizeof($bits)==0) return FALSE;
+		return implode(" ",$bits);
+	}
+	
+	private function resolve_duration_xpath($node,$context,$xpath){
+		$results = $this->get_xpath_result($node,$context,$xpath);
+		foreach($results as $result){
+			$text = $result->nodeValue;
+			if(strlen(trim($text))==0) continue;
+			$matches = array();
+			if(!preg_match("/^\\s*".$this->DURATION_PATTERN."\\s*$/",$text,$matches)) continue;
+			if(sizeof($matches) == 1) continue;			
+			if(sizeof($matches) <= 8){
+				// words format
+				$years = 0;   if(sizeof($matches) >= 1+1 && $matches[1+1] != "") $years = (int)$matches[1+1];
+				$months = 0;  if(sizeof($matches) >= 1+2 && $matches[1+2] != "") $months = (int)$matches[1+2];
+				$weeks = 0;   if(sizeof($matches) >= 1+3 && $matches[1+3] != "") $weeks = (int)$matches[1+3];
+				$days = 0;    if(sizeof($matches) >= 1+4 && $matches[1+4] != "") $days = (int)$matches[1+4];
+				$hours = 0;   if(sizeof($matches) >= 1+5 && $matches[1+5] != "") $hours = (int)$matches[1+5];
+				$minutes = 0; if(sizeof($matches) >= 1+6 && $matches[1+6] != "") $minutes = (int)$matches[1+6];
+				$seconds = 0; if(sizeof($matches) >= 1+7 && $matches[1+7] != "") $seconds = (int)$matches[1+7];				
+				return approx_duration($years,$months,$weeks,$days,$hours,$minutes,$seconds);				
+			}elseif(sizeof($matches) == 14){
+				// iso datetime format
+				$years = 0;   if(sizeof($matches) >= 1+7+1 && $matches[1+7+1] != "") $years = (int)$matches[1+7+1];
+				$months = 0;  if(sizeof($matches) >= 1+7+2 && $matches[1+7+2] != "") $months = (int)$matches[1+7+2];
+				$days = 0;    if(sizeof($matches) >= 1+7+3 && $matches[1+7+3] != "") $days = (int)$matches[1+7+3];
+				$hours = 0;   if(sizeof($matches) >= 1+7+4 && $matches[1+7+4] != "") $hours = (int)$matches[1+7+4];
+				$minutes = 0; if(sizeof($matches) >= 1+7+5 && $matches[1+7+5] != "") $minutes = (int)$matches[1+7+5];
+				$seconds = 0; if(sizeof($matches) >= 1+7+6 && $matches[1+7+6] != "") $seconds = (int)$matches[1+7+6];
+				return approx_duration($years,$months,0,$days,$hours,$minutes,$seconds);
+			}else{
+				// iso time only format
+				$hours = 0;   if(sizeof($matches) >= 1+7+6+1 && $matches[1+7+6+1] != "") $hours = (int)$matches[1+7+6+1];
+				$minutes = 0; if(sizeof($matches) >= 1+7+6+2 && $matches[1+7+6+2] != "") $minutes = (int)$matches[1+7+6+2];
+				$seconds = 0; if(sizeof($matches) >= 1+7+6+3 && $matches[1+7+6+3] != "") $seconds = (int)$matches[1+7+6+3];
+				return approx_duration(0,0,0,0,$hours,$minutes,$seconds);
+			}
+		}
+		return FALSE;
+	}
+	
+	private function resolve_date_xpath($node,$context,$xpath){
+		$date = NULL;
+		$time = NULL;
+		$gotspectime = FALSE;
+		$results = $this->get_xpath_result($node,$context,$xpath);
+		foreach($results as $result){
+			$text = $result->nodeValue;
+			if(strlen(trim($text))==0) continue;
+			if(preg_match("/^\\s*".$this->TIME_PATTERN."\\s*$/",$text)){
+				// time without date found - override existing time
+				// if it was part of a datetime as it may have been the
+				// default time
 				$parsed = strtotime($text);
 				if($parsed===FALSE) continue;
 				$cal = new Calendar($parsed);
-				$time = array( 
-					"hour"=>(int)$cal->get_hour(), 
-					"minute"=>(int)$cal->get_minute(), 
-					"second"=>(int)$cal->get_second() );
+				if(!$gotspectime){
+					$time = array( 
+						"hour"=>(int)$cal->get_hour(), 
+						"minute"=>(int)$cal->get_minute(), 
+						"second"=>(int)$cal->get_second() );
+					$gotspectime = TRUE;
+					if($date!==NULL && $time!==NULL) break;
+				}
 			}else{
 				$parsed = strtotime($text);
-				if($parsed)===FALSE) continue;
+				if($parsed===FALSE) continue;
 				$cal = new Calendar($parsed);
-				$date = array(
-					"year"=>(int)$cal->get_year(),
-					"month"=>(int)$cal->get_month(),
-					"day"=>(int)$cal->get_day() );
-				// only override time if not found yet - it could be just
-				// the default
-				if($time!==NULL){
+				if($date===NULL){
+					$date = array(
+						"year"=>(int)$cal->get_year(),
+						"month"=>(int)$cal->get_month(),
+						"day"=>(int)$cal->get_day() );
+				}
+				if($time===NULL){
 					$time = array(
 						"hour"=>(int)$cal->get_hour(),
 						"minute"=>(int)$cal->get_minute(),
 						"second"=>(int)$cal->get_second() );
 				}
+				// don't break, as we might find a more specific
+				// time value
 			}
 		}
 		if($date===NULL || $time===NULL) return FALSE;
 		return array( "date"=>$date, "time"=>$time );
 	}
 	
+	protected abstract function get_calendar_url($filename_or_url,$config);
+	
 	protected function file_to_event_data($filename_or_url,$config){
-		$xp_event = "//".$this->el_with_class_xp("*","vcalendar"); // defines context element for event properties
-		$xp_summary = $this->std_el_contents_with_class_xp("summary");
-		$xp_description = $this->std_el_contents_with_class_xp("description");
-		$xp_url = $this->anchor_contents_with_class_xp("url");
-		$xp_dtstart = $this->date_contents_with_class_xp("dtstart");
-		$xp_dtend = $this->date_contents_with_class_xp("dtend");
-		$xp_duration = $this->std_el_contents_with_class_xp("duration");
+		$xp_cal_summary = "/html/head/title//text()";
+		$xp_cal_description = "/html/head/meta[@name='description']/@content";
+		$xp_cal_url = NULL;
+		$xp_event = "//".$this->el_with_class_xp("*","vevent"); // defines context element for event properties
+		$xp_ev_summary = $this->std_el_contents_with_class_xp("summary");
+		$xp_ev_description = $this->std_el_contents_with_class_xp("description");
+		$xp_ev_url = $this->anchor_contents_with_class_xp("url");
+		$xp_ev_dtstart = $this->date_contents_with_class_xp("dtstart");
+		$xp_ev_dtend = $this->date_contents_with_class_xp("dtend");
+		$xp_ev_duration = $this->std_el_contents_with_class_xp("duration");
 		if(isset($config["html-markers"])){
 			$markers = $config["html-markers"];
-			if(isset($markers["event-class"])) $xp_event = "//".$this->el_with_class_xp("*",$markers["event-class"]);
-			if(isset($markers["event-xpath"])) $xp_event = $markers["event-xpath"];
-			if(isset($markers["name-class"])) $xp_summary = $this->std_el_contents_with_class_xp($markers["name-class"]);
-			if(isset($markers["name-xpath"])) $xp_summary = $markers["name-xpath"];
-			if(isset($markers["description-class"])) $xp_description = $this->std_el_contents_with_class_xp($markers["description-class"]);
-			if(isset($markers["description-xpath"])) $xp_description = $markers["description-xpath"];
-			if(isset($markers["url-class"])) $xp_url = $this->anchor_contents_with_class_xp($markers["url-class"]);
-			if(isset($markers["url-xpath"])) $xp_url = $markers["url-xpath"];
-			if(isset($markers["start-class"])) $xp_dtstart = $this->date_contents_with_class_xp($markers["start-class"]);
-			if(isset($markers["start-xpath"])) $xp_dtstart = $markers["start-xpath"];
-			if(isset($markers["end-class"])) $xp_dtend = $this->date_contents_with_class_xp($markers["end-class"]);
-			if(isset($markers["end-xpath"])) $xp_dtend = $markers["end-xpath"];
-			if(isset($markers["duration-class"])) $xp_duration = $this->std_el_contents_with_class_xp($markers["duration-class"]);
-			if(isset($markers["duration-xpath"])) $xp_duration = $markers["duration-xpath"];
+			if(isset($markers["cal-name-class"])) $xp_cal_summary = $this->std_el_contents_with_class_xp($markers["cal-name-class"]);
+			if(isset($markers["cal-name-xpath"])) $xp_cal_summary = $markers["cal-name-xpath"];
+			if(isset($markers["cal-description-class"])) $xp_cal_description = $this->std_el_contents_with_class_xp($markers["cal-description-class"]);
+			if(isset($markers["cal-description-xpath"])) $xp_cal_description = $markers["cal-description-xpath"];
+			if(isset($markers["cal-url-class"])) $xp_cal_url = $this->std_el_contents_with_class_xp($markers["cal-url-class"]);
+			if(isset($markers["cal-url-xpath"])) $cap_cal_xpath = $markers["cal-url-xpath"];
+			if(isset($markers["cal-event-class"])) $xp_event = "//".$this->el_with_class_xp("*",$markers["cal-event-class"]);
+			if(isset($markers["cal-event-xpath"])) $xp_event = $markers["cal-event-xpath"];
+			if(isset($markers["ev-name-class"])) $xp_ev_summary = $this->std_el_contents_with_class_xp($markers["ev-name-class"]);
+			if(isset($markers["ev-name-xpath"])) $xp_ev_summary = $markers["ev-name-xpath"];
+			if(isset($markers["ev-description-class"])) $xp_ev_description = $this->std_el_contents_with_class_xp($markers["ev-description-class"]);
+			if(isset($markers["ev-description-xpath"])) $xp_ev_description = $markers["ev-description-xpath"];
+			if(isset($markers["ev-url-class"])) $xp_ev_url = $this->anchor_contents_with_class_xp($markers["ev-url-class"]);
+			if(isset($markers["ev-url-xpath"])) $xp_ev_url = $markers["ev-url-xpath"];
+			if(isset($markers["ev-start-class"])) $xp_ev_dtstart = $this->date_contents_with_class_xp($markers["ev-start-class"]);
+			if(isset($markers["ev-start-xpath"])) $xp_ev_dtstart = $markers["ev-start-xpath"];
+			if(isset($markers["ev-end-class"])) $xp_ev_dtend = $this->date_contents_with_class_xp($markers["ev-end-class"]);
+			if(isset($markers["ev-end-xpath"])) $xp_ev_dtend = $markers["ev-end-xpath"];
+			if(isset($markers["ev-duration-class"])) $xp_ev_duration = $this->std_el_contents_with_class_xp($markers["ev-duration-class"]);
+			if(isset($markers["ev-duration-xpath"])) $xp_ev_duration = $markers["ev-duration-xpath"];
 		}
 		$doc = new DOMDocument();
 		@$doc->loadHTMLFile($filename_or_url);
@@ -275,36 +349,48 @@ abstract class HtmlInputBase extends InputFormat {
 			return "HTML: Could not open '$filename_or_url'";
 		}
 		$xpath = new DOMXPath($doc);
-		$event_els = $this->get_xpath_result($doc,$xpath,$xp_event);
-		if($event_els===FALSE) return "HTML: Bad XPath expression for events";
 		$data = new stdClass();
+		$calname = $this->resolve_concat_xpath($doc->documentElement,$xpath,$xp_cal_summary);
+		if($calname!==FALSE) $data->name = $calname;
+		$caldesc = $this->resolve_concat_xpath($doc->documentElement,$xpath,$xp_cal_description);
+		if($caldesc!==FALSE) $data->description = $caldesc;
+		if($xp_cal_url!==NULL){
+			$calurl = $this->resolve_single_xpath($doc->documentElement,$xpath,$xp_cal_url);
+			if($calurl!==FALSE) $data->url = $calurl;
+		}else{
+			$data->url = $this->get_calendar_url($filename_or_url,$config);
+		}
+		$event_els = $this->get_xpath_result($doc->documentElement,$xpath,$xp_event);
+		if($event_els===FALSE) return "HTML: Bad XPath expression for events";
 		$data->events = array();
 		foreach($event_els as $event_el){
 			$event = new stdClass();
-			$name = $this->resolve_xpath($event_el,$xpath,$xp_summary);
+			$name = $this->resolve_concat_xpath($event_el,$xpath,$xp_ev_summary);
 			if($name===FALSE) continue;
 			$event->name = $name;
-			$description = $this->resolve_xpath($event_el,$xpath,$xp_description);
+			$description = $this->resolve_concat_xpath($event_el,$xpath,$xp_ev_description);
 			if($description!==FALSE) $event->description = $description;
-			$url = $this->resolve_xpath($event_al,$xpath,$xp_url);
+			$url = $this->resolve_single_xpath($event_el,$xpath,$xp_ev_url);
 			if($url!==FALSE) $event->url = $url;
-			$start = $this->resolve_date_xpath($event_el,$xpath,$xp_dtstart);
+			$start = $this->resolve_date_xpath($event_el,$xpath,$xp_ev_dtstart);
 			if($start===FALSE) continue;
 			$event->date = $start["date"];
 			$event->time = $start["time"];
-			$end = $this->resolve_date_xpath($event_el,$xpath,$xp_dtend);
+			$end = $this->resolve_date_xpath($event_el,$xpath,$xp_ev_dtend);
 			if($end!==FALSE){
-				$event->duration = calc_approx_duration($event->date,$event->time,$end["date"],$end["time"]);
+				$event->duration = calc_approx_diff($event->date,$event->time,$end["date"],$end["time"]);
 			}else{
-				$duration = $this->resolve_xpath($event_el,$xpath,$xp_duration);
-				if($duration===FALSE) continue;
-				$event->duration = $duration;
-				// TODO: parse duration using crazy big regex
+				$duration = $this->resolve_duration_xpath($event_el,$xpath,$xp_ev_duration);
+				if($duration!==FALSE){
+					$event->duration = $duration;
+				}else{
+					$event->duration = array( "days"=>1, "hours"=>0, "minutes"=>0, "seconds"=>0 );
+				}
 			}
 			array_push($data->events,$event);
 		}
-		// TODO extract event elements
-		// TODO extract event properties
+		$data->{"recurring-events"} = array();
+		return $data;
 	}
 
 }
@@ -332,18 +418,46 @@ class LocalHtmlInput extends HtmlInputBase {
 	private function get_filename($scriptname){
 		return "$scriptname-master.html";
 	}
+	
+	protected function get_calendar_url($filename,$config){
+		return ""; //TODO: get current url of script
+	}
 
 	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$config){
 		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
-		
-		$handle = @fopen($filename,"r");
-		if($handle === FALSE){
-			return "HTML: File '$filename' not found";
-		}
-		$data = $this->file_to_event_data($handle,$config);
-		fclose($handle);
-		return $data;
+		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;		
+		return $this->file_to_event_data($filename,$config);		
+	}
+}
+
+class RemoteHtmlInput extends HtmlInputBase {
+
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+		if($formatname != "html-remote") return FALSE;
+		if(!$this->is_available()) return FALSE;
+		if(!isset($config["url"])) return "HTML: missing config parameter: 'url'";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$config);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+		if(!isset($config["url"])) return FALSE;
+		if(strtolower(substr($config["url"],-4,4)) != ".htm" && strtolower(substr($config["url"],-5,5)) != ".html") return FALSE;
+		$result = write_config($scriptname,array("format"=>"html-remote","url"=>$config["url"]));
+		if($result) return $result;
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$config);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	protected function get_calendar_url($url,$config){
+		return $url;
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$config){
+		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
+		return $this->file_to_event_data($url,$config);
 	}
 }
 
@@ -414,11 +528,11 @@ abstract class ICalendarInputBase extends InputFormat {
 						if(is_string($starttime)) return $starttime;
 						$endtime = $this->convert_datetime($vevent["properties"]["dtend"][0]);
 						if(is_string($endtime)) return $endtime;
-						$eventobj->duration = calc_approx_duration(
-							array($starttime["year"],$starttime["month"],$starttime["day"]),
-							array($starttime["hour"],$starttime["minute"],$starttime["second"]),
-							array($endtime["year"],$endtime["month"],$endtime["day"]),
-							array($endtime["hour"],$endtime["minute"],$endtime["second"])
+						$eventobj->duration = calc_approx_diff(
+							array( "year"=>$starttime["year"], "month"=>$starttime["month"], "day"=>$starttime["day"] ),
+							array( "hour"=>$starttime["hour"], "minute"=>$starttime["minute"], "second"=>$starttime["second"] ),
+							array( "year"=>$endtime["year"], "month"=>$endtime["month"], "day"=>$endtime["day"] ),
+							array( "hour"=>$endtime["hour"], "minute"=>$endtime["minute"], "second"=>$endtime["second"] )
 						);							
 					}elseif(isset($dtstart["parameters"]["value"]) && strtolower($dtstart["parameters"]["value"])=="date"){
 						// start specified as date
@@ -4172,7 +4286,7 @@ function inc_and_return_match_count(&$countarray,$yearkey,$unitkey){
 // each time is array( "hour"=>h, "minute"=>m, "second"=>s ),
 // and returned duration is array( "days"=>d, "hours"=>h, "minutes"=>m, "seconds"=>s )
 // Not accurate for periods over 1 day
-function calc_approx_duration($startdate,$starttime,$enddate,$endtime){
+function calc_approx_diff($startdate,$starttime,$enddate,$endtime){
 	$start_dt = new DateTime();
 	$start_dt->setDate($startdate["year"],$startdate["month"],$startdate["day"]);
 	$start_dt->setTime($starttime["hour"],$starttime["minute"],$starttime["second"]);
@@ -4180,8 +4294,14 @@ function calc_approx_duration($startdate,$starttime,$enddate,$endtime){
 	$end_dt->setDate($enddate["year"],$enddate["month"],$enddate["day"]);
 	$end_dt->setTime($endtime["hour"],$endtime["minute"],$endtime["second"]);
 	$diff = $start_dt->diff($end_dt);
-	return array( "days"=>round($diff->y*365.25 + $diff->m*30.5 + $diff->d),
-					"hours"=>$diff->h, "minutes"=>$diff->i, "seconds"=>$diff->s );
+	return approx_duration($diff->y,$diff->m,0,$diff->d,$diff->h,$diff->i,$diff->s);
+}
+
+// returns duration as array( "days"=>d, "hours"=>h, "minutes"=>m, "seconds"=>s ),
+// but not accurate for numbers of years or months.
+function approx_duration($years,$months,$weeks,$days,$hours,$minutes,$seconds){
+	return array( "days"=>round($years*365.25 + $months*30.5 + $days),
+					"hours"=>$hours, "minutes"=>$minutes, "seconds"=>$seconds );
 }
 
 function get_config_filename($scriptname){
@@ -4317,9 +4437,11 @@ $input_formats = array(
 	new RemoteICalendarInput(),
 	new RemoteJsonInput(),
 	new RemoteCsvInput(),
+	new RemoteHtmlInput(),
 	new LocalICalendarInput(),
 	new LocalJsonInput(),
 	new LocalCsvInput(),
+	new LocalHtmlInput(),
 	new NoInput()
 );
 
@@ -4330,20 +4452,3 @@ if($result===FALSE){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
-
-
-/*class Foo extends ICalendarInputBase {
-	public function convert(){
-		$handle = @fopen("test.ics","r");
-		if($handle===FALSE) return "Couldn't open";
-		$result = $this->feed_to_event_data($handle);
-		fclose($handle);
-		return $result;
-	}
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){}
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){}
-}
-
-$f = new Foo();
-$result = $f->convert();
-var_dump($result);*/
