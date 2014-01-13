@@ -6,46 +6,29 @@
 // TODO: test output in different timezone
 // TODO: event starting at midnight showing on day before in html
 // TODO: google calendar instructions in readme
-// TODO: facebook input
-//		feasible using oath?
-//		can user create application token and generate user token for it
-//			prompt for calendar login
-//			prompt for facebook login
-//			scrape facebook to create app token
-//			store app token
-//			generate user token
-// TODO: wordpress api
-//		most common use case?
-// TODO: eventbrite input
-//		api requires oauth?
-//		can user create application token and generate user token for it
+// TODO: yahoo calendar instructions in readme
+// TODO: better url handling - check status code
 // TODO: Filename in config for local files
 // TODO: Outlook CSV export
 // TODO: Yahoo Calendar CSV export
+// TODO: sql database input
+// TODO: responsive design for html
+// TODO: facebook input
+// TODO: wordpress api
+// TODO: eventbrite input
 // TODO: easy-subscribe widgit
 // TODO: yaml input
 // TODO: yaml output
 // TODO: atom output
 // TODO: yaml output
-// TODO: more useful html outputs (or css?)
 // TODO: textpattern api
-// TODO: sql database input
 // TODO: web-based UI for config
 // TODO: web-based UI input
-// TODO: page-scraping input
-//		given page url
-//		use page meta title and description, use page url
-//		css classes for event and indiv property elements?
-//		xpath? *[class='vevent']
-// TODO: hcalendar input
 // TODO: icalendar proper timezone construction
 // TODO: icalendar disallows zero events
-// TODO: responsive design for html
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
 // TODO: need better way to handle incrementing from start time
-
-
 
 abstract class InputFormat {
 
@@ -420,7 +403,7 @@ class LocalHtmlInput extends HtmlInputBase {
 	}
 	
 	protected function get_calendar_url($filename,$config){
-		return ""; //TODO: get current url of script
+		return "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".$filename;
 	}
 
 	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$config){
