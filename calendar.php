@@ -2,15 +2,17 @@
 
 // TODO: icalendar recurring events
 //		handle rdate, exdate and exrule
+//			convert existing inputs to return recurrence and exclude arrays
 //		handle multiple rrules and exrules
 // TODO: test output in different timezone
 // TODO: event starting at midnight showing on day before in html
 // TODO: google calendar instructions in readme
 // TODO: yahoo calendar instructions in readme
-// TODO: better url handling - check status code
-// TODO: Filename in config for local files
 // TODO: Outlook CSV export
 // TODO: Yahoo Calendar CSV export
+
+// TODO: better url handling - check status code
+// TODO: Filename in config for local files
 // TODO: sql database input
 // TODO: responsive design for html
 // TODO: facebook input
@@ -44,7 +46,8 @@ abstract class InputFormat {
 			url			
 		recurring-events
 			name (required)
-			recurrence (required) (start,[end],[count],week-start,rules)
+			recurrence (required,list) (start,[end],[count],week-start,rules)
+			excluding (list) (start,[end],[count],week-start,rules)
 			duration (days,hours,minutes,seconds)
 			description
 			url				*/
@@ -536,9 +539,10 @@ abstract class ICalendarInputBase extends InputFormat {
 				$exdates = isset($vevent["properties"]["exdate"]) ? $vevent["properties"]["exdate"] : NULL;
 				
 				if($rrules!==NULL || $exrules!==NULL || $rdates!==NULL || $exdates!==NULL){				
-					$recurrence = $this->convert_recurrence($rrules,$exrules,$rdates,$exdates,$starttime);
-					if(is_string($recurrence)) return $recurrence;
-					$eventobj->recurrence = $recurrence;
+					$convrecur = $this->convert_recurrence($rrules,$exrules,$rdates,$exdates,$starttime);
+					if(is_string($convrecur)) return $convrecur;
+					$eventobj->recurrence = $convrecur["include"];
+					$eventobj->excluding = $convrecur["exclude"];
 					array_push($calobj->{"recurring-events"},$eventobj);
 				}
 			}
@@ -594,17 +598,11 @@ abstract class ICalendarInputBase extends InputFormat {
 		return array( "days"=>$dur["weeks"]*7+$dur["days"], "hours"=>$dur["hours"], 
 			"minutes"=>$dur["minutes"], "seconds"=>$dur["seconds"] );
 	}
+
+	private function convert_recur_rule($rrule,$starttime){
 	
-	private function convert_recurrence($rruleprops,$exruleprops,$rdateprops,$exdateprops,$starttime){
-		if($rruleprops!==NULL && sizeof($rruleprops) > 1 || sizeof($rruleprops[0]["value"]) > 1){ 
-			return "ICalendar: multiple RRULEs not supported";
-		}
-		if($exruleprops!==NULL) return "ICalendar: EXRULE not supported";
-		if($rdateprops!==NULL) return "ICalendar: RDATE not supported";
-		if($exdateprops!==NULL) return "ICalendar: EXDATE not supported";
-		$rrule = $rruleprops[0]["value"][0];
 		if(!isset($rrule["freq"])) return "ICalendar: RRULE without FREQ parameter";
-		
+			
 		$result = array( "start"=>$starttime, "rules"=>array(), "week-start"=>1 );
 		
 		if(isset($rrule["until"])){		
@@ -752,6 +750,49 @@ abstract class ICalendarInputBase extends InputFormat {
 		
 		return $result;
 	}
+	
+	private function convert_recurrence($rruleprops,$exruleprops,$rdateprops,$exdateprops,$starttime){
+		if($rruleprops===NULL && $rdateprops===NULL) return "ICalendar: Must specify RRULE or RDATE";
+		
+		$results = array( "include"=>array(), "exclude"=>array() );
+		if($rruleprops!==NULL){
+			foreach($rruleprops as $rruleprop){
+				foreach($rruleprop["value"] as $rrule){
+					$result = $this->convert_recur_rule($rrule,$starttime);
+					if(is_string($result)) return $result;
+					array_push($results["include"],$result);
+				}
+			}
+		}
+		if($exruleprops!==NULL){
+			foreach($exruleprops as $exruleprop){
+				foreach($exruleprop["value"] as $exrule){
+					$result = $this->convert_recur_rule($exrule,$starttime);
+					if(is_string($result)) return $result;
+					array_push($results["exclude"],$result);
+				}
+			}
+		}
+		if($rdateprops!==NULL){
+			foreach($rdateprops as $rdateprop){
+				$rdtime = $this->convert_datetime($rdateprop);
+				if(is_string($rdtime)) return $rdtime;
+				$result = $this->convert_recur_rule(array( "freq"=>"yearly" ),$rdtime);
+				if(is_string($result)) return $result;
+				array_push($results["include"],$result);
+			}
+		}
+		if($exdateprops!==NULL){
+			foreach($exdateprops as $exdateprop){
+				$edtime = $this->convert_datetime($exdateprop);
+				if(is_string($edtime)) return $edtime;
+				$result = $this->convert_recur_rule(array( "freq"=>"yearly" ),$edtime);
+				if(is_string($result)) return $result;
+				array_push($results["exclude"],$result);
+			}
+		}
+		return $results;		
+	}
 } 
 
 class LocalICalendarInput extends ICalendarInputBase {
@@ -880,7 +921,7 @@ abstract class CsvInputBase extends InputFormat {
 				$parser = new RecurrenceParser();
 				$edate = $parser->parse(strtolower($edate),$time);
 				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
-				$event->recurrence = $edate;
+				$event->recurrence = array( $edate );
 			}
 			
 			$eduration = "";
@@ -1070,7 +1111,7 @@ abstract class JsonInputBase extends InputFormat {
 				if($result===FALSE){
 					return "JSON: Invalid event recurrence syntax";
 				}
-				$item->recurrence = $result;
+				$item->recurrence = array( $result );
 			}
 		}
 		return $data;
@@ -3825,415 +3866,23 @@ function generate_events($data){
 	// recurring events
 	$max_recurring = 1000;
 	foreach($data->{"recurring-events"} as $item){
-		if(sizeof($events) >= $max_recurring) break;
-		$rec = $item->recurrence;
-		if(isset($rec["rules"]["day-hour"])){
-			$checkhours = array();
-			foreach($rec["rules"]["day-hour"] as $hour) array_push($checkhours,$hour>=0 ? $hour : 24-$hour);
-		}else{
-			$checkhours = array();
-			for($i=0;$i<24;$i++) array_push($checkhours,$i);
-		}
-		if(isset($rec["rules"]["hour-minute"])){
-			$checkmins = array();
-			foreach($rec["rules"]["hour-minute"] as $min) array_push($checkmins,$min>=0 ? $min : 60-$min);
-		}else{
-			$checkmins = array();
-			for($i=0;$i<60;$i++) array_push($checkmins,$i);
-		}
-		// doesnt handle leap second, but oh well
-		if(isset($rec["rules"]["minute-second"])){
-			$checksecs = array();
-			foreach($rec["rules"]["minute-second"] as $sec) array_push($checksecs,$sec>=0 ? $sec : 60-$sec);
-		}else{
-			$checksecs = array();
-			for($i=0;$i<60;$i++) array_push($checksecs,$i);
-		}
-		$start = $rec["start"];
-		$cal = new Calendar($start["year"],$start["month"],$start["day"],
-			$start["hour"],$start["minute"],$start["second"]);
-		$startstamp = $cal->time;
-		if(isset($rec["end"])){
-			$end = $rec["end"];
-			$endcal = new Calendar($end["year"],$end["month"],$end["day"],
-				$end["hour"],$end["minute"],$end["second"]);
-			$endstamp = $endcal->time;
-		}
-		if(isset($rec["count"])){
-			$count = $rec["count"];
-		}
-		$weekstart = $rec["week-start"];
-		$cal->set_second(0);
-		$cal->set_minute(0);
-		$cal->set_hour(0);
-		$cal->set_day(1);
-		$cal->set_month(1);
-		while($cal->get_day_of_week() != $weekstart) $cal->inc_days(-1);
-		$yearcount = 0;
-		$lastyear = $cal->get_year();
-		$lastyearofweek = $cal->get_year_of_week($weekstart);
-		$monthcount = 0;
-		$lastmonth = $cal->get_month();
-		$weekcount = 0;
-		$lastweek = $cal->get_week_of_year($weekstart);
-		$daycount = 0;
-		$monthxdaynums = array();
-		for($i=1;$i<=7;$i++) $monthxdaynums[$i] = $cal->get_xdays_in_month($i,$cal->get_day());
-		$yearxdaynums = array();
-		for($i=1;$i<=7;$i++) $yearxdaynums[$i] = $cal->get_xdays_in_year($i,$cal->get_day_of_year());		
-		$secmatchcounts = array( (int)$cal->get_year() => array() );
-		$minmatchcounts = array( (int)$cal->get_year() => array() );
-		$hourmatchcounts = array( (int)$cal->get_year() => array() );
-		$daymatchcounts = array( (int)$cal->get_year() => array() );
-		$weekmatchcounts = array( (int)$cal->get_year_of_week($weekstart) => array() );
-		$monthmatchcounts = array( (int)$cal->get_year() => array() );
-		$yearmatchcounts = array( (int)$cal->get_year() => array() );
-		$potentialdates = array( (int)$cal->get_year() => array() );
-		$datecount = 0;
 		$dates = array();
-		while(TRUE){
-			foreach($checkhours as $hour){
-				foreach($checkmins as $minute){
-					foreach($checksecs as $second){
-						$cal->set_hour($hour);
-						$cal->set_minute($minute);
-						$cal->set_second($second);
-						if($cal->time > $endthres) break 4;
-						
-						if(isset($rec["rules"]["year-month"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["year-month"] as $mo){
-								if($mo < 0) $mo = 12+1+$mo;								
-								if($cal->get_month() == $mo){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["year-week"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["year-week"] as $yw){							
-								if($yw < 0) $yw = $cal->get_weeks_in_year($weekstart)+1+$yw;
-								if($cal->get_week_of_year($weekstart) == $yw){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["year-day"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["year-day"] as $dy){
-								if($dy < 0) $dy = $cal->get_days_in_year()+1+$dy;
-								if($cal->get_day_of_year() == $dy){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["year-week-day"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["year-week-day"] as $ywd){
-								$ywdd = $ywd["day"];
-								if($ywdd < 0) $ywdd = 7+1+$ywdd;
-								if($cal->get_day_of_week() == $ywdd){
-									if(isset($ywd["number"])){
-										$ywdn = $ywd["number"];
-										if($ywdn < 0) $ywdn = $cal->get_xdays_in_year($ywdd)+1+$ywdn;
-										if($yearxdaynums[$ywdd] == $ywdn){
-											$matched = TRUE;
-										}
-									}else{
-										$matched = TRUE;
-									}
-									if($matched) break;
-								}
-							}	
-							if(!$matched) continue;					
-						}
-						if(isset($rec["rules"]["month-day"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["month-day"] as $dy){
-								if($dy < 0) $dy = $cal->get_days_in_month()+1+$dy;
-								if($cal->get_day() == $dy){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["month-week-day"])){						
-							$matched = FALSE;
-							foreach($rec["rules"]["month-week-day"] as $mwd){
-								$mwdd = $mwd["day"];
-								if($mwdd < 0) $mwdd = 7+1+$mwdd;
-								if($cal->get_day_of_week() == $mwdd){
-									if(isset($mwd["number"])){
-										$mwdn = $mwd["number"];
-										if($mwdn < 0) $mwdn = $cal->get_xdays_in_month($mwdd)+1+$mwdn;
-										if($monthxdaynums[$mwdd] == $mwdn){
-											$matched = TRUE;
-										}
-									}else{
-										$matched = TRUE;
-									}
-									if($matched) break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["day-hour"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["day-hour"] as $hr){
-								if($hr < 0) $hr = 23+1+$hr;
-								if($cal->get_hour() == $hr){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["hour-minute"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["hour-minute"] as $min){
-								if($min < 0) $min = 59+1+$min;
-								if($cal->get_minute() == $min){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["minute-second"])){
-							$matched = FALSE;
-							foreach($rec["rules"]["minute-second"] as $sec){
-								if($sec < 0) $sec = 59+1+$sec;
-								if($cal->get_second() == $sec){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["year-ival"])){
-							if($yearcount % $rec["rules"]["year-ival"] != 0){
-								continue;
-							}
-						}						
-						if(isset($rec["rules"]["month-ival"])){
-							if($monthcount % $rec["rules"]["month-ival"] != 0){
-								continue;
-							}							
-						}	
-						if(isset($rec["rules"]["week-ival"])){
-							if($weekcount % $rec["rules"]["week-ival"] != 0){
-								continue;
-							}							
-						}					
-						if(isset($rec["rules"]["day-ival"])){
-							if($daycount % $rec["rules"]["day-ival"] != 0){
-								continue;
-							}
-						}
-						if(isset($rec["rules"]["hour-ival"])){
-							if(($daycount*24+$hour) % $rec["rules"]["hour-ival"] != 0){
-								continue;
-							}
-						}
-						if(isset($rec["rules"]["minute-ival"])){
-							if(($daycount*24*60 + $hour*60 + $minute) % $rec["rules"]["minute-ival"] != 0){
-								continue;
-							}
-						}
-						if(isset($rec["rules"]["second-ival"])){
-							if(($daycount*24*60*60 + $hour*60*60 + $minute*60 + $second) % $rec["rules"]["second-ival"] != 0){
-								continue;
-							}
-						}
-						$date = array( "timestamp"=>$cal->time );
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_year();
-						$date["yearmatch"] = inc_and_return_match_count($yearmatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_month();
-						$date["monthmatch"] = inc_and_return_match_count($monthmatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year_of_week($weekstart);
-						$nkey = (int)$cal->get_week_of_year($weekstart);
-						$date["weekmatch"] = inc_and_return_match_count($weekmatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_month()."-".(int)$cal->get_day();
-						$date["daymatch"] = inc_and_return_match_count($daymatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()."-".(int)$cal->get_hour();
-						$date["hourmatch"] = inc_and_return_match_count($hourmatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()."-".(int)$cal->get_hour()
-								."-".(int)$cal->get_minute();
-						$date["minmatch"] = inc_and_return_match_count($minmatchcounts,$ykey,$nkey);
-						$ykey = (int)$cal->get_year();
-						$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()
-								."-".(int)$cal->get_hour()."-".(int)$cal->get_minute()."-".(int)$cal->get_second();
-						$date["secmatch"] = inc_and_return_match_count($secmatchcounts,$ykey,$nkey);
-						
-						// if before start date, increment match counts but don't include date
-						if($cal->time > $startstamp){
-							$key = (int)$cal->get_year();
-							if(!isset($potentialdates[$key])) $potentialdates[$key] = array();
-							array_push($potentialdates[$key], $date);
-						}
-					}
-				}
+		foreach($item->recurrence as $rec){
+			$maxdates = round($max_recurring/sizeof($data->{"recurring-events"})/sizeof($item->recurrence));
+			$recdates = array();
+			evaluate_recurrence($rec,$startthres,$endthres,$maxdates,function($timestamp) use (&$recdates){
+				array_push($recdates,$timestamp);
+			});
+			$dates = array_unique(array_merge($dates,$recdates));
+		}
+		if(isset($item->excluding)){
+			foreach($item->excluding as $exc){
+				evaluate_recurrence($exc,$startthres,$endthres,999999,function($timestamp) use (&$dates){
+					$found = array_search($timestamp,$dates);
+					if($found!==FALSE) unset($dates[$found]);
+				});
 			}
-			$allperiodsended = FALSE;
-			$cal->inc_days(1);
-			// only increment day/week/month/year counts once at start date
-			if($cal->time > $startstamp) $daycount ++;
-			if($cal->get_week_of_year($weekstart) != $lastweek){
-				if($cal->time > $startstamp) $weekcount ++;
-				$lastweek = $cal->get_week_of_year($weekstart);
-			}
-			if($cal->get_month() != $lastmonth){
-				if($cal->time > $startstamp) $monthcount ++;
-				$lastmonth = $cal->get_month();
-				for($i=1;$i<=7;$i++) $monthxdaynums[$i] = 0;
-			}
-			if($cal->get_year() != $lastyear){
-				// if year has changed to be same as week's year, last week is accounted for
-				if($cal->get_year_of_week($weekstart) == $cal->get_year()) $allperiodsended = TRUE;
-				if($cal->time > $startstamp) $yearcount ++;
-				$lastyear = $cal->get_year();
-				for($i=1;$i<=7;$i++) $yearxdaynums[$i] = 0;
-			}
-			if($cal->get_year_of_week($weekstart) != $lastyearofweek){
-				// if week's year has changed to be same as year, last week is accounted for
-				if($cal->get_year() == $cal->get_year_of_week($weekstart)) $allperiodsended = TRUE;
-				$lastyearofweek = $cal->get_year_of_week($weekstart);
-			}
-			if($allperiodsended){
-				if(isset($potentialdates[(int)$cal->get_year()-1])){
-					foreach($potentialdates[(int)$cal->get_year()-1] as $date){
-						if(isset($end) && $date["timestamp"] > $endstamp) break 2;
-						if(isset($count) && $datecount >= $count) break 2;
-						if(sizeof($dates) >= $max_recurring) break 2;
-						
-						$tempcal = new Calendar($date["timestamp"]);
-						
-						if(isset($rec["rules"]["year-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_year();
-							foreach($rec["rules"]["year-match"] as $ym){
-								if($ym < 0) $ym = $yearmatchcounts[$ykey][$nkey]+1+$ym;
-								if($date["yearmatch"] == $ym){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["month-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_month();
-							foreach($rec["rules"]["month-match"] as $mm){
-								if($mm < 0) $mm = $monthmatchcounts[$ykey][$nkey]+1+$mm;
-								if($date["monthmatch"] == $mm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["week-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_week_of_year($weekstart);
-							foreach($rec["rules"]["week-match"] as $wm){
-								if($wm < 0) $wm = $weekmatchcounts[$ykey][$nkey]+1+$wm;
-								if($date["weekmatch"] == $wm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["day-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_month()."-".$tempcal->get_day();
-							foreach($rec["rules"]["day-match"] as $dm){
-								if($dm < 0) $dm = $daymatchcounts[$ykey][$nkey]+1+$dm;
-								if($date["daymatch"] == $dm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["hour-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()."-".(int)$tempcal->get_hour();
-							foreach($rec["rules"]["hour-match"] as $hm){
-								if($hm < 0) $hm = $hourmatchcounts[$ykey][$nkey]+1+$hm;
-								if($date["hourmatch"] == $hm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["minute-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()
-									."-".(int)$tempcal->get_hour()."-".(int)$tempcal->get_minute();
-							foreach($rec["rules"]["minute-match"] as $mm){
-								if($mm < 0) $mm = $minmatchcounts[$ykey][$nkey]+1+$mm;
-								if($date["minmatch"] == $mm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						if(isset($rec["rules"]["second-match"])){
-							$matched = FALSE;
-							$ykey = (int)$tempcal->get_year();
-							$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()
-								."-".(int)$tempcal->get_hour()."-".(int)$tempcal->get_minute()."-".(int)$tempcal->get_second();
-							foreach($rec["rules"]["second-match"] as $sm){
-								if($sm < 0) $sm = $secmatchcounts[$ykey][$nkey]+1+$sm;
-								if($date["secmatch"] == $sm){
-									$matched = TRUE;
-									break;
-								}
-							}
-							if(!$matched) continue;
-						}
-						$datecount ++;
-						if($date["timestamp"] >= $startthres && $date["timestamp"] < $endthres){
-							array_push($dates,$date["timestamp"]);
-						}
-					}
-				}
-				// discard evaluated counts and potential dates
-				unset($secmatchcounts[(int)$cal->get_year()-1]);
-				unset($minmatchcounts[(int)$cal->get_year()-1]);
-				unset($hourmatchcounts[(int)$cal->get_year()-1]);
-				unset($daymatchcounts[(int)$cal->get_year()-1]);
-				unset($weekmatchcounts[(int)$cal->get_year_of_week($weekstart)-1]);
-				unset($monthmatchcounts[(int)$cal->get_year()-1]);
-				unset($yearmatchcounts[(int)$cal->get_year()-1]);
-				unset($potentialdates[(int)$cal->get_year()-1]);
-			}
-			// increment xday counts even before we reach start time
-			$monthxdaynums[$cal->get_day_of_week()] ++;
-			$yearxdaynums[$cal->get_day_of_week()] ++;
-		} // end while
-		
+		}
 		foreach($dates as $date){
 			array_push($events,make_event($item, $date, $item->duration));
 		}
@@ -4256,6 +3905,419 @@ function generate_events($data){
 	});
 	
 	return $events;
+}
+
+// evaluates recurrence descriptor and invokes the 'withdate' callback with the timestamp
+// of each event occurence found.
+function evaluate_recurrence($rec,$startthres,$endthres,$maxdates,$withdate){
+
+	if(isset($rec["rules"]["day-hour"])){
+		$checkhours = array();
+		foreach($rec["rules"]["day-hour"] as $hour) array_push($checkhours,$hour>=0 ? $hour : 24+$hour);
+	}else{
+		$checkhours = array();
+		for($i=0;$i<24;$i++) array_push($checkhours,$i);
+	}
+	if(isset($rec["rules"]["hour-minute"])){
+		$checkmins = array();
+		foreach($rec["rules"]["hour-minute"] as $min) array_push($checkmins,$min>=0 ? $min : 60+$min);
+	}else{
+		$checkmins = array();
+		for($i=0;$i<60;$i++) array_push($checkmins,$i);
+	}
+	// doesnt handle leap second, but oh well
+	if(isset($rec["rules"]["minute-second"])){
+		$checksecs = array();
+		foreach($rec["rules"]["minute-second"] as $sec) array_push($checksecs,$sec>=0 ? $sec : 60+$sec);
+	}else{
+		$checksecs = array();
+		for($i=0;$i<60;$i++) array_push($checksecs,$i);
+	}
+	$start = $rec["start"];
+	$cal = new Calendar($start["year"],$start["month"],$start["day"],
+		$start["hour"],$start["minute"],$start["second"]);
+	$startstamp = $cal->time;
+	if(isset($rec["end"])){
+		$end = $rec["end"];
+		$endcal = new Calendar($end["year"],$end["month"],$end["day"],
+			$end["hour"],$end["minute"],$end["second"]);
+		$endstamp = $endcal->time;
+	}
+	if(isset($rec["count"])){
+		$count = $rec["count"];
+	}
+	$weekstart = $rec["week-start"];
+	$cal->set_second(0);
+	$cal->set_minute(0);
+	$cal->set_hour(0);
+	$cal->set_day(1);
+	$cal->set_month(1);
+	while($cal->get_day_of_week() != $weekstart) $cal->inc_days(-1);
+	$yearcount = 0;
+	$lastyear = $cal->get_year();
+	$lastyearofweek = $cal->get_year_of_week($weekstart);
+	$monthcount = 0;
+	$lastmonth = $cal->get_month();
+	$weekcount = 0;
+	$lastweek = $cal->get_week_of_year($weekstart);
+	$daycount = 0;
+	$monthxdaynums = array();
+	for($i=1;$i<=7;$i++) $monthxdaynums[$i] = $cal->get_xdays_in_month($i,$cal->get_day());
+	$yearxdaynums = array();
+	for($i=1;$i<=7;$i++) $yearxdaynums[$i] = $cal->get_xdays_in_year($i,$cal->get_day_of_year());		
+	$secmatchcounts = array( (int)$cal->get_year() => array() );
+	$minmatchcounts = array( (int)$cal->get_year() => array() );
+	$hourmatchcounts = array( (int)$cal->get_year() => array() );
+	$daymatchcounts = array( (int)$cal->get_year() => array() );
+	$weekmatchcounts = array( (int)$cal->get_year_of_week($weekstart) => array() );
+	$monthmatchcounts = array( (int)$cal->get_year() => array() );
+	$yearmatchcounts = array( (int)$cal->get_year() => array() );
+	$potentialdates = array( (int)$cal->get_year() => array() );
+	$datecount = 0;
+	$returnedcount = 0;
+	while(TRUE){
+		foreach($checkhours as $hour){
+			foreach($checkmins as $minute){
+				foreach($checksecs as $second){
+					$cal->set_hour($hour);
+					$cal->set_minute($minute);
+					$cal->set_second($second);
+					if($cal->time > $endthres) break 4;
+					
+					if(isset($rec["rules"]["year-month"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["year-month"] as $mo){
+							if($mo < 0) $mo = 12+1+$mo;								
+							if($cal->get_month() == $mo){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["year-week"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["year-week"] as $yw){							
+							if($yw < 0) $yw = $cal->get_weeks_in_year($weekstart)+1+$yw;
+							if($cal->get_week_of_year($weekstart) == $yw){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["year-day"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["year-day"] as $dy){
+							if($dy < 0) $dy = $cal->get_days_in_year()+1+$dy;
+							if($cal->get_day_of_year() == $dy){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["year-week-day"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["year-week-day"] as $ywd){
+							$ywdd = $ywd["day"];
+							if($ywdd < 0) $ywdd = 7+1+$ywdd;
+							if($cal->get_day_of_week() == $ywdd){
+								if(isset($ywd["number"])){
+									$ywdn = $ywd["number"];
+									if($ywdn < 0) $ywdn = $cal->get_xdays_in_year($ywdd)+1+$ywdn;
+									if($yearxdaynums[$ywdd] == $ywdn){
+										$matched = TRUE;
+									}
+								}else{
+									$matched = TRUE;
+								}
+								if($matched) break;
+							}
+						}	
+						if(!$matched) continue;					
+					}
+					if(isset($rec["rules"]["month-day"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["month-day"] as $dy){
+							if($dy < 0) $dy = $cal->get_days_in_month()+1+$dy;
+							if($cal->get_day() == $dy){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["month-week-day"])){						
+						$matched = FALSE;
+						foreach($rec["rules"]["month-week-day"] as $mwd){
+							$mwdd = $mwd["day"];
+							if($mwdd < 0) $mwdd = 7+1+$mwdd;
+							if($cal->get_day_of_week() == $mwdd){
+								if(isset($mwd["number"])){
+									$mwdn = $mwd["number"];
+									if($mwdn < 0) $mwdn = $cal->get_xdays_in_month($mwdd)+1+$mwdn;
+									if($monthxdaynums[$mwdd] == $mwdn){
+										$matched = TRUE;
+									}
+								}else{
+									$matched = TRUE;
+								}
+								if($matched) break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["day-hour"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["day-hour"] as $hr){
+							if($hr < 0) $hr = 23+1+$hr;
+							if($cal->get_hour() == $hr){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["hour-minute"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["hour-minute"] as $min){
+							if($min < 0) $min = 59+1+$min;
+							if($cal->get_minute() == $min){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["minute-second"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["minute-second"] as $sec){
+							if($sec < 0) $sec = 59+1+$sec;
+							if($cal->get_second() == $sec){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["year-ival"])){
+						if($yearcount % $rec["rules"]["year-ival"] != 0){
+							continue;
+						}
+					}						
+					if(isset($rec["rules"]["month-ival"])){
+						if($monthcount % $rec["rules"]["month-ival"] != 0){
+							continue;
+						}							
+					}	
+					if(isset($rec["rules"]["week-ival"])){
+						if($weekcount % $rec["rules"]["week-ival"] != 0){
+							continue;
+						}							
+					}					
+					if(isset($rec["rules"]["day-ival"])){
+						if($daycount % $rec["rules"]["day-ival"] != 0){
+							continue;
+						}
+					}
+					if(isset($rec["rules"]["hour-ival"])){
+						if(($daycount*24+$hour) % $rec["rules"]["hour-ival"] != 0){
+							continue;
+						}
+					}
+					if(isset($rec["rules"]["minute-ival"])){
+						if(($daycount*24*60 + $hour*60 + $minute) % $rec["rules"]["minute-ival"] != 0){
+							continue;
+						}
+					}
+					if(isset($rec["rules"]["second-ival"])){
+						if(($daycount*24*60*60 + $hour*60*60 + $minute*60 + $second) % $rec["rules"]["second-ival"] != 0){
+							continue;
+						}
+					}
+					$date = array( "timestamp"=>$cal->time );
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_year();
+					$date["yearmatch"] = inc_and_return_match_count($yearmatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_month();
+					$date["monthmatch"] = inc_and_return_match_count($monthmatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year_of_week($weekstart);
+					$nkey = (int)$cal->get_week_of_year($weekstart);
+					$date["weekmatch"] = inc_and_return_match_count($weekmatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_month()."-".(int)$cal->get_day();
+					$date["daymatch"] = inc_and_return_match_count($daymatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()."-".(int)$cal->get_hour();
+					$date["hourmatch"] = inc_and_return_match_count($hourmatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()."-".(int)$cal->get_hour()
+							."-".(int)$cal->get_minute();
+					$date["minmatch"] = inc_and_return_match_count($minmatchcounts,$ykey,$nkey);
+					$ykey = (int)$cal->get_year();
+					$nkey = (int)$cal->get_month()."-".(int)$cal->get_day()
+							."-".(int)$cal->get_hour()."-".(int)$cal->get_minute()."-".(int)$cal->get_second();
+					$date["secmatch"] = inc_and_return_match_count($secmatchcounts,$ykey,$nkey);
+					
+					// if before start date, increment match counts but don't include date
+					if($cal->time > $startstamp){
+						$key = (int)$cal->get_year();
+						if(!isset($potentialdates[$key])) $potentialdates[$key] = array();
+						array_push($potentialdates[$key], $date);
+					}
+				}
+			}
+		}
+		$allperiodsended = FALSE;
+		$cal->inc_days(1);
+		// only increment day/week/month/year counts once at start date
+		if($cal->time > $startstamp) $daycount ++;
+		if($cal->get_week_of_year($weekstart) != $lastweek){
+			if($cal->time > $startstamp) $weekcount ++;
+			$lastweek = $cal->get_week_of_year($weekstart);
+		}
+		if($cal->get_month() != $lastmonth){
+			if($cal->time > $startstamp) $monthcount ++;
+			$lastmonth = $cal->get_month();
+			for($i=1;$i<=7;$i++) $monthxdaynums[$i] = 0;
+		}
+		if($cal->get_year() != $lastyear){
+			// if year has changed to be same as week's year, last week is accounted for
+			if($cal->get_year_of_week($weekstart) == $cal->get_year()) $allperiodsended = TRUE;
+			if($cal->time > $startstamp) $yearcount ++;
+			$lastyear = $cal->get_year();
+			for($i=1;$i<=7;$i++) $yearxdaynums[$i] = 0;
+		}
+		if($cal->get_year_of_week($weekstart) != $lastyearofweek){
+			// if week's year has changed to be same as year, last week is accounted for
+			if($cal->get_year() == $cal->get_year_of_week($weekstart)) $allperiodsended = TRUE;
+			$lastyearofweek = $cal->get_year_of_week($weekstart);
+		}
+		if($allperiodsended){
+			if(isset($potentialdates[(int)$cal->get_year()-1])){
+				foreach($potentialdates[(int)$cal->get_year()-1] as $date){
+					if(isset($end) && $date["timestamp"] > $endstamp) break 2;
+					if(isset($count) && $datecount >= $count) break 2;
+					if($returnedcount >= $maxdates) break 2;
+					
+					$tempcal = new Calendar($date["timestamp"]);
+					
+					if(isset($rec["rules"]["year-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_year();
+						foreach($rec["rules"]["year-match"] as $ym){
+							if($ym < 0) $ym = $yearmatchcounts[$ykey][$nkey]+1+$ym;
+							if($date["yearmatch"] == $ym){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["month-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_month();
+						foreach($rec["rules"]["month-match"] as $mm){
+							if($mm < 0) $mm = $monthmatchcounts[$ykey][$nkey]+1+$mm;
+							if($date["monthmatch"] == $mm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["week-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_week_of_year($weekstart);
+						foreach($rec["rules"]["week-match"] as $wm){
+							if($wm < 0) $wm = $weekmatchcounts[$ykey][$nkey]+1+$wm;
+							if($date["weekmatch"] == $wm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["day-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_month()."-".$tempcal->get_day();
+						foreach($rec["rules"]["day-match"] as $dm){
+							if($dm < 0) $dm = $daymatchcounts[$ykey][$nkey]+1+$dm;
+							if($date["daymatch"] == $dm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["hour-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()."-".(int)$tempcal->get_hour();
+						foreach($rec["rules"]["hour-match"] as $hm){
+							if($hm < 0) $hm = $hourmatchcounts[$ykey][$nkey]+1+$hm;
+							if($date["hourmatch"] == $hm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["minute-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()
+								."-".(int)$tempcal->get_hour()."-".(int)$tempcal->get_minute();
+						foreach($rec["rules"]["minute-match"] as $mm){
+							if($mm < 0) $mm = $minmatchcounts[$ykey][$nkey]+1+$mm;
+							if($date["minmatch"] == $mm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					if(isset($rec["rules"]["second-match"])){
+						$matched = FALSE;
+						$ykey = (int)$tempcal->get_year();
+						$nkey = (int)$tempcal->get_month()."-".(int)$tempcal->get_day()
+							."-".(int)$tempcal->get_hour()."-".(int)$tempcal->get_minute()."-".(int)$tempcal->get_second();
+						foreach($rec["rules"]["second-match"] as $sm){
+							if($sm < 0) $sm = $secmatchcounts[$ykey][$nkey]+1+$sm;
+							if($date["secmatch"] == $sm){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
+					$datecount ++;
+					if($date["timestamp"] >= $startthres && $date["timestamp"] < $endthres){
+						$withdate($date["timestamp"]);
+						$returnedcount ++;
+					}
+				}
+			}
+			// discard evaluated counts and potential dates
+			unset($secmatchcounts[(int)$cal->get_year()-1]);
+			unset($minmatchcounts[(int)$cal->get_year()-1]);
+			unset($hourmatchcounts[(int)$cal->get_year()-1]);
+			unset($daymatchcounts[(int)$cal->get_year()-1]);
+			unset($weekmatchcounts[(int)$cal->get_year_of_week($weekstart)-1]);
+			unset($monthmatchcounts[(int)$cal->get_year()-1]);
+			unset($yearmatchcounts[(int)$cal->get_year()-1]);
+			unset($potentialdates[(int)$cal->get_year()-1]);
+		}
+		// increment xday counts even before we reach start time
+		$monthxdaynums[$cal->get_day_of_week()] ++;
+		$yearxdaynums[$cal->get_day_of_week()] ++;
+	} // end while	
 }
 
 function inc_and_return_match_count(&$countarray,$yearkey,$unitkey){
