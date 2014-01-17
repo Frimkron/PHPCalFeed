@@ -1,17 +1,11 @@
 <?php
 
-// TODO: icalendar recurring events
-//		handle rdate, exdate and exrule
-//			convert existing inputs to return recurrence and exclude arrays
-//		handle multiple rrules and exrules
-// TODO: test output in different timezone
-// TODO: event starting at midnight showing on day before in html
-// TODO: google calendar instructions in readme
-// TODO: yahoo calendar instructions in readme
+// TODO: HTML input instructions in readme
 // TODO: Outlook CSV export
 // TODO: Yahoo Calendar CSV export
-
 // TODO: better url handling - check status code
+// TODO: test output in different timezone
+
 // TODO: Filename in config for local files
 // TODO: sql database input
 // TODO: responsive design for html
@@ -495,8 +489,9 @@ abstract class ICalendarInputBase extends InputFormat {
 				if(!isset($vevent["properties"]["dtstart"])){
 					continue; // ignore if no start time
 				}
-				$starttime = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
-				if(is_string($starttime)) return $starttime;
+				$starttimes = $this->convert_datetime($vevent["properties"]["dtstart"][0]);
+				if(is_string($starttimes)) return $starttimes;
+				$starttime = $starttimes[0];
 				$eventobj->date = array( "year"=>$starttime["year"], "month"=>$starttime["month"], "day"=>$starttime["day"] );
 				$eventobj->time = array( "hour"=>$starttime["hour"], "minute"=>$starttime["minute"], "second"=>$starttime["second"] );
 				
@@ -510,10 +505,12 @@ abstract class ICalendarInputBase extends InputFormat {
 					$dtstart = $vevent["properties"]["dtstart"][0];
 					if(isset($vevent["properties"]["dtend"])){
 						// start and end specified
-						$starttime = $this->convert_datetime($dtstart);
-						if(is_string($starttime)) return $starttime;
-						$endtime = $this->convert_datetime($vevent["properties"]["dtend"][0]);
-						if(is_string($endtime)) return $endtime;
+						$starttimes = $this->convert_datetime($dtstart);
+						if(is_string($starttimes)) return $starttimes;
+						$starttime = $starttimes[0];
+						$endtimes = $this->convert_datetime($vevent["properties"]["dtend"][0]);
+						if(is_string($endtimes)) return $endtimes;
+						$endtime = $endtimes[0];
 						$eventobj->duration = calc_approx_diff(
 							array( "year"=>$starttime["year"], "month"=>$starttime["month"], "day"=>$starttime["day"] ),
 							array( "hour"=>$starttime["hour"], "minute"=>$starttime["minute"], "second"=>$starttime["second"] ),
@@ -563,12 +560,21 @@ abstract class ICalendarInputBase extends InputFormat {
 	private function convert_datetime($property){
 		if(isset($property["parameters"]["value"]) && strtolower($property["parameters"]["value"])=="date"){
 			# date only
-			$date = $property["value"][0];
-			return array( "year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
-					"hour"=>0, "minute"=>0, "second"=>0);
+			$result = array();
+			foreach($property["value"] as $date){
+				array_push($result, array( "year"=>$date["year"], "month"=>$date["month"], "day"=>$date["day"],
+						"hour"=>0, "minute"=>0, "second"=>0));
+			}
+			return $result;
 		}else{
 			# date and time
-			return $this->convert_datetime_value($property["value"][0],$property["parameters"]);
+			$result = array();
+			foreach($property["value"] as $value){
+				$datetime = $this->convert_datetime_value($value,$property["parameters"]);
+				if(is_string($datetime)) return $datetime;
+				array_push($result,$datetime);
+			}
+			return $result;
 		}
 	}
 	
@@ -775,20 +781,30 @@ abstract class ICalendarInputBase extends InputFormat {
 		}
 		if($rdateprops!==NULL){
 			foreach($rdateprops as $rdateprop){
-				$rdtime = $this->convert_datetime($rdateprop);
-				if(is_string($rdtime)) return $rdtime;
-				$result = $this->convert_recur_rule(array( "freq"=>"yearly" ),$rdtime);
-				if(is_string($result)) return $result;
-				array_push($results["include"],$result);
+				$rdtimes = $this->convert_datetime($rdateprop);
+				if(is_string($rdtimes)) return $rdtimes;
+				foreach($rdtimes as $rdtime){
+					$result = array( "start"=>$starttime, "rules"=>array(
+							"year"=>array($rdtime["year"]), "year-month"=>array($rdtime["month"]), 
+							"month-day"=>array($rdtime["day"]),"day-hour"=>array($rdtime["hour"]), 
+							"hour-minute"=>array($rdtime["minute"]), "minute-second"=>array($rdtime["second"])
+						), "week-start"=>1 );
+					array_push($results["include"],$result);
+				}
 			}
 		}
 		if($exdateprops!==NULL){
 			foreach($exdateprops as $exdateprop){
-				$edtime = $this->convert_datetime($exdateprop);
-				if(is_string($edtime)) return $edtime;
-				$result = $this->convert_recur_rule(array( "freq"=>"yearly" ),$edtime);
-				if(is_string($result)) return $result;
-				array_push($results["exclude"],$result);
+				$edtimes = $this->convert_datetime($exdateprop);
+				if(is_string($edtimes)) return $edtimes;
+				foreach($edtimes as $edtime){
+					$result = array( "start"=>$starttime, "rules"=>array(
+							"year"=>array($edtime["year"]), "year-month"=>array($edtime["month"]), 
+							"month-day"=>array($edtime["day"]),"day-hour"=>array($edtime["hour"]), 
+							"hour-minute"=>array($edtime["minute"]), "minute-second"=>array($edtime["second"])
+						), "week-start"=>1 );
+					array_push($results["exclude"],$result);
+				}
 			}
 		}
 		return $results;		
@@ -1304,8 +1320,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						|| ($cal->get_year() == $curryear && $cal->get_month() <= $currmonth)){
 					$week = array();
 					for($i=0; $i<7; $i++){
-						$cal->set_hour(0);
-						$cal->set_minute(0);
+						$cal->set_time(0,0,0);
 						$starttime = $cal->time;
 						$cal->inc_days(1);
 						$endtime = $cal->time;
@@ -3983,6 +3998,17 @@ function evaluate_recurrence($rec,$startthres,$endthres,$maxdates,$withdate){
 					$cal->set_minute($minute);
 					$cal->set_second($second);
 					if($cal->time > $endthres) break 4;
+
+					if(isset($rec["rules"]["year"])){
+						$matched = FALSE;
+						foreach($rec["rules"]["year"] as $yr){
+							if($cal->get_year() == $yr){
+								$matched = TRUE;
+								break;
+							}
+						}
+						if(!$matched) continue;
+					}
 					
 					if(isset($rec["rules"]["year-month"])){
 						$matched = FALSE;
@@ -4366,6 +4392,10 @@ function write_config($scriptname,$config){
 	}
 	fwrite($handle,");");	
 	fclose($handle);
+}
+
+function debug_dump($var){
+	foreach(explode("\n",var_export($var,TRUE)) as $line) error_log($line);
 }
 
 function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiretime){
