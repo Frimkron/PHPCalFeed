@@ -1,7 +1,3 @@
-<!-- 
-  TODO: HTML input
--->
-
 PHPCalFeed
 ==========
 
@@ -56,10 +52,11 @@ FTP client, SCP client or similar:
 
 ### 3.2 Provide Event Info
 
-The script can read event info from a __CSV__, __JSON__ or __ICalendar__ file.
-CSV is the simplest of these options. Events can be one-off occurrences or 
-recurring events which repeat on a schedule. See the following sections for how
-to prepare the data file in your chosen format. 
+The script can read event info from a __CSV__, __JSON__ or __ICalendar__ file. 
+It can also extract event info from __HTML__. A CSV file is the simplest of 
+these options. Events can be one-off occurrences or recurring events which 
+repeat on a schedule. See the following sections for how to prepare the data 
+file in your chosen format. 
 
 
 #### 3.2.1 Local File
@@ -245,6 +242,167 @@ scope of this document, but for more information please refer to the
 [ICalendar RFC](http://tools.ietf.org/search/rfc5545).
 
 
+#### 3.2.6 HTML Input
+
+HTML is a document markup language used to deliver web pages to your internet 
+browser. HTML content is more often concerned with the presentation of a page
+rather than delivering meaningful data in a machine-readable format. PHPCalFeed
+can, however, "scrape" event information from a page provided the relevant 
+markup elements can be uniquely identified in the document. To use HTML format,
+use the file extension `.htm` or `.html` - for example, `calendar-master.html`.
+It is usually more useful to use a remote HTML file by its URL. See 
+[Remote File](#322-remote-file) for more information.
+
+By default, PHPCalFeed will look for event information embedded using the 
+[hCalendar](http://microformats.org/wiki/hcalendar) microformat syntax.
+Microformats are a standard for encoding semantic information in HTML, whereby 
+page elements are given particular CSS `class` attributes to denote their 
+meaning. As a minimum, the element surrounding each set of _event_ properties 
+should be given the class `vevent`. Within each event element, the event's 
+_name_ should be given the class `summary`. Its start time should be given the 
+class `dtstart` - PHPCalFeed will attempt to interpret the date and time 
+description as best it can. If any of the page elements already has a `class` 
+attribute, simply add the new class to the end of the attribute, separated by a
+space. Below is an example page with added hCalendar information:
+
+```````````````````````````````````````````````````````` html
+
+<html>
+	<head>
+		<title>Upcoming Events</title>
+	</head>
+	<body>
+		<p>Here is the list of upcoming events for our group!<p>
+		<table>
+			<tbody>
+				<tr class="big-yellow-text">
+					<th>Date</th>
+					<th>Description</th>
+				</tr>
+				<tr class="big-yellow-text vevent">
+					<td>
+						<abbr class="dtstart" title="2013-09-30 19:00:00">
+							30th September at 7pm
+						</abbr>
+					</td>
+					<td class="summary">
+						Talk: The Deeper Meaning of Lolcats
+					</td>
+				</tr>
+				<tr class="big-yellow-text vevent">
+					<td>
+						<abbr class="dtstart" title="2013-10-28 18:30:00">
+							28th October at 6:30pm
+						</abbr>
+					</td>
+					<td class="summary">
+						Magic show with Bozo the clown
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</body>
+</html>
+
+````````````````````````````````````````````````````````
+
+The other supported properties are: 
+
+* `description`
+* `dtend`
+* `duration`
+* `url`
+
+You can specify alternative class names for PHPCalFeed to look for instead. To 
+do this, add the `html-markers` property to your `calendar-config.php` file. 
+The css class names are specified as an associative array. For example:
+
+```````````````````````````````````````````````` php
+
+<?php
+return array(
+	'format' => 'html-local',
+	'html-markers' => array(
+		'cal-event-class' => 'calendar-event',
+		'ev-name-class' => 'event-name',
+		'ev-start-class' => 'event-time' 
+	)
+);
+
+
+````````````````````````````````````````````````
+
+The full list of customisable class properties is as follows:
+
+* `cal-name-class` - the calendar title. Defaults to the page `<title>` contents.
+* `cal-description-class` - the calendar description. Defaults to the page's `<meta>` 
+  description contents.
+* `cal-url-class` - the calendar's URL. Defaults to the URL of the page.
+* `cal-event-class` - the element surrounding each set of event properties. Defaults 
+  to `vevent`.
+* `ev-name-class` - the event's name. Defaults to `summary`.
+* `ev-description-class` - the event's description. Defaults to `description`.
+* `ev-url-class` - the event's URL. Defaults to `url`.
+* `ev-start-class` - the event's start date/time. Defaults to `dtstart`.
+* `ev-end-class` - the event's end date/time. Defaults to `dtend`.
+* `ev-duration-class` - the event's duration. Defaults to `duration`.
+
+As a more advanced yet more flexible alternative to class names, you can 
+specify an XPath expression for each element. XPath is a powerful and precise 
+expression language for describing the location of content in an HTML or XML 
+document. A good XPath primer can be found at 
+[W3Schools](http://www.w3schools.com/xpath/), or for a detailed explanation 
+check out the [W3C's XPath spec](http://www.w3.org/TR/xpath/). Below is an 
+example of specifying the event elements using XPath expressions:
+
+```````````````````````````````````````````````` php
+
+<?php
+return array(
+	'format' => 'html-local',
+	'html-markers' => array(
+	
+		// items within the list with id 'events'
+		'cal-event-xpath' => "//ul[@id='events']/li",
+		
+		// the 'span' element with class 'evname' within the event element
+		'ev-name-class' => "span[@class='evname']",
+		
+		// the second 'strong' element within the span with class 'evtime', 
+		// within the event element
+		'ev-start-class' => "span[@class='evtime']/strong[2]" 
+	)
+);
+
+
+````````````````````````````````````````````````
+
+The full list of customisable XPath properties is as follows:
+
+* `cal-name-xpath` - the calendar title. Expression is relative to the document 
+  root. Defaults to the page `<title>` contents.
+* `cal-description-xpath` - the calendar description. Expression is relative to 
+  the document root. Defaults to the page's `<meta>`
+  description contents.
+* `cal-url-xpath` - the calendar's URL. Expression is relative to the document 
+  root. Defaults to the URL of the page.
+* `ev-name-xpath` - the event`s name. Expression is relative to the event element.
+  Defaults to element with `summary` class.
+* `ev-description-xpath` - the event's description. Expression is relative to the 
+  event element. Defaults to element with `description` class.
+* `ev-url-xpath` - the event's url. Expression is relative to the event element.
+  Defaults to element with `url` class.
+* `ev-start-xpath` - the event's start date/time. Expression is relative to the 
+  event element. Defaults to element with `dtstart` class.
+* `ev-end-xpath` - the event's end  date/time. Expression is relative to the 
+  event element. Defaults to element with `dtend` class.
+* `ev-duration-xpath` - the event's duration. Expression is relative to the 
+  event element. Defaults to element with `duration` class.
+
+You can, of course, use a mix of class names and XPath expressions to specify
+the desired HTML elements.
+
+
 #### 3.2.6 Google Calendar Input
 
 PHPCalFeed can read event information directly from a public Google calendar,
@@ -272,7 +430,7 @@ return array(
 	'url' => 'http://your-calendar/url.ics'
 );
 
-``````````````````````````````````````````````
+```````````````````````````````````````````````
 
 See the [Remote File](#322-remote-file) and 
 [ICalendar Input](#325-icalendar-input) sections for more information.
@@ -522,6 +680,12 @@ The name and purpose of each CSS class is explained below:
 * `cal-event` - the container for each event
 * `cal-nav-link` - the links to jump to each calendar month
 * `cal-hcal-link` - the footer link to the hCalendar spec
+
+In addition to these classes, each calendar table is given an `id` attribute:
+
+* `cal-calendar-0` - the current month's calendar table
+* `cal-calendar-1` - next month's calendar table
+* `cal-calendar-2` - the month after next's calendar table
 
 
 4 Licence
