@@ -1,13 +1,14 @@
 <?php
 
-// TODO: HTML input instructions in readme
 // TODO: Outlook CSV export
-// TODO: Yahoo Calendar CSV export
+//		Looser date parsing using strtotime
+//		Looser header names
+//		Separate tab-separated format
 // TODO: better url handling - check status code
 // TODO: test output in different timezone
 
 // TODO: Filename in config for local files
-// TODO: sql database input
+// TODO: sql database input using pdo
 // TODO: responsive design for html
 // TODO: facebook input
 // TODO: wordpress api
@@ -886,21 +887,36 @@ class RemoteICalendarInput extends ICalendarInputBase {
 
 abstract class CsvInputBase extends InputFormat {
 
+	protected $COL_PATTERNS = array(
+		"name" 			=> "/^\\s*(name|title|summary|subject)\\s*$/i",
+		"description"	=> "/^\\s*(desc(ription)?)\\s*$/i",
+		"url"			=> "/^\\s*(url|uri|href|link|website)\\s*$/i",
+		"start-date" 	=> "/^\\s*(date|start\\W*date|dtstart|start)\\s*$/i",
+		"start-time" 	=> "/^\\s*(time|start\\W*time)\\s*$/i",
+		"end-date" 		=> "/^\\s*(end\\W*date|dtend|end)\\s*$/i",
+		"end-time" 		=> "/^\\s*(end\\W*time)\\s*$/i"
+		"duration" 		=> "/^\\s*(dur(ation)?|length)\\s*$/i",
+	);
+
 	protected function stream_to_event_data($handle){
 	
-		$header = fgetcsv($handle);
+		$header = @fgetcsv($handle);
 		if($header === FALSE){
-			return "CSV: Missing header row";
+			return "CSV: Failed to read header row";
 		}
 		if(sizeof($header)==0){
 			return "CSV: No columns in header row";
 		}
 		$colmap = array();
 		foreach($header as $index => $label){
-			$colmap[strtolower(trim($label))] = $index;
+			foreach($COL_PATTERNS as $col => $pattern){
+				if(preg_match($pattern,$label)){
+					$colmap[$col] = $index;
+				}
+			}
 		}
-		foreach(array("name","date") as $req_key){
-			if(!array_key_exists($req_key,$colmap)){
+		foreach(array("name","start-date") as $req_key){
+			if(array_key_exists($req_key,$colmap)){				
 				return "CSV: Required column '$req_key' not found in header";
 			}
 		}
@@ -918,36 +934,61 @@ abstract class CsvInputBase extends InputFormat {
 			if(strlen($ename)==0) return "CSV: Missing 'name' value";
 			$event->name = $ename;
 			
-			$etime = "";
-			if(array_key_exists("time",$colmap)){
-				$etime = trim($row[$colmap["time"]]);
+			$estime = "";
+			if(array_key_exists("start-time",$colmap)){
+				$estime = trim($row[$colmap["start-time"]]);
 			}
-			if(strlen($etime)==0) $etime = "00:00";
-			if(!preg_match("/^\d{1,2}:\d{2}$/",$etime)) return "CSV: Invalid time format - expected 'hh:mm'";
-			$bits = explode(":",$etime);
+			if(strlen($estime)==0) $estime = "00:00";
+			if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$estime)) return "CSV: Invalid time format - expected 'hh:mm'";
+			$bits = explode(":",$estime);
 			$time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
 			
-			$edate = trim($row[$colmap["date"]]);
-			if(strlen($edate)==0) return "CSV: Missing 'date' value";
-			if(preg_match("/^\d{4}-\d{1,2}-\d{1,2}$/",$edate)){
-				$bits = explode("-",$edate);
+			$esdate = trim($row[$colmap["start-date"]]);
+			if(strlen($esdate)==0) return "CSV: Missing 'start-date' value";
+			if(preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$esdate)){
+				$bits = explode("-",$esdate);
 				$event->date = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
 				$event->time = $time;
 			}else{
 				$parser = new RecurrenceParser();
-				$edate = $parser->parse(strtolower($edate),$time);
+				$edate = $parser->parse(strtolower($esdate),$time);
 				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
-				$event->recurrence = array( $edate );
+				$event->recurrence = array( $esdate );
 			}
 			
-			$eduration = "";
-			if(array_key_exists("duration",$colmap)){
-				$eduration = strtolower(trim($row[$colmap["duration"]]));
+			$eetime = "";
+			$endtime = NULL;
+			if(array_key_exists("end-time",$colmap)){
+				$eetime = trim($row[$colmap["end-time"]]);
+				if(strlen($eetime)!=0 && preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$eedate)){
+					$bits = explode(":",$eedate);
+					$endtime = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+				}	
 			}
-			if(strlen($eduration)==0) $eduration = "1d";
-			$eduration = parse_duration($eduration);
-			if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";
-			$event->duration = $eduration;
+			
+			$enddate = NULL;
+			if(array_key_exists("end-date",$colmap)){
+				$eedate = trim($row[$colmap["end-date"]]);
+				if(strlen($eedate)!=0 && preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$eedate)){
+					$bits = explode("-",$eedate);
+					$enddate = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
+				}
+			}
+			
+			if($enddate !== NULL){
+			
+				// TODO: calc duration from end date
+			
+			}else{									
+				$eduration = "";
+				if(array_key_exists("duration",$colmap)){
+					$eduration = strtolower(trim($row[$colmap["duration"]]));
+				}
+				if(strlen($eduration)==0) $eduration = "1d";
+				$eduration = parse_duration($eduration);
+				if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";
+				$event->duration = $eduration;
+			}
 			
 			if(array_key_exists("description",$colmap)){
 				$event->description = trim($row[$colmap["description"]]);

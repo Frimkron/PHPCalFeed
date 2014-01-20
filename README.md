@@ -403,7 +403,7 @@ You can, of course, use a mix of class names and XPath expressions to specify
 the desired HTML elements.
 
 
-#### 3.2.6 Google Calendar Input
+#### 3.2.7 Google Calendar Input
 
 PHPCalFeed can read event information directly from a public Google calendar,
 using remote ICalendar input. First you will need to obtain your calendar's 
@@ -436,7 +436,7 @@ See the [Remote File](#322-remote-file) and
 [ICalendar Input](#325-icalendar-input) sections for more information.
 
 
-#### 3.2.7 Yahoo Calendar Input
+#### 3.2.8 Yahoo Calendar Input
 
 PHPCalFeed can read event information directly from a public Yahoo calendar,
 using remote ICalendar input. First you will need to obtain your calendar's 
@@ -464,7 +464,7 @@ return array(
 ``````````````````````````````````````````````
 
 
-#### 3.2.8 Event Recurrence Specification
+#### 3.2.9 Event Recurrence Specification
 
 In your input file you can specify an event that takes place on a recurring 
 schedule, such as a social gathering that happens at the same time every week. 
