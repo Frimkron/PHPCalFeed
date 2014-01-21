@@ -894,7 +894,7 @@ abstract class CsvInputBase extends InputFormat {
 		"start-date" 	=> "/^\\s*(date|start\\W*date|dtstart|start)\\s*$/i",
 		"start-time" 	=> "/^\\s*(time|start\\W*time)\\s*$/i",
 		"end-date" 		=> "/^\\s*(end\\W*date|dtend|end)\\s*$/i",
-		"end-time" 		=> "/^\\s*(end\\W*time)\\s*$/i"
+		"end-time" 		=> "/^\\s*(end\\W*time)\\s*$/i",
 		"duration" 		=> "/^\\s*(dur(ation)?|length)\\s*$/i",
 	);
 
@@ -909,14 +909,15 @@ abstract class CsvInputBase extends InputFormat {
 		}
 		$colmap = array();
 		foreach($header as $index => $label){
-			foreach($COL_PATTERNS as $col => $pattern){
+			foreach($this->COL_PATTERNS as $col => $pattern){
 				if(preg_match($pattern,$label)){
 					$colmap[$col] = $index;
+					break;
 				}
 			}
 		}
 		foreach(array("name","start-date") as $req_key){
-			if(array_key_exists($req_key,$colmap)){				
+			if(!array_key_exists($req_key,$colmap)){				
 				return "CSV: Required column '$req_key' not found in header";
 			}
 		}
@@ -930,72 +931,93 @@ abstract class CsvInputBase extends InputFormat {
 		
 			$event = new stdClass();
 			
-			$ename = trim($row[$colmap["name"]]);
-			if(strlen($ename)==0) return "CSV: Missing 'name' value";
-			$event->name = $ename;
-			
-			$estime = "";
-			if(array_key_exists("start-time",$colmap)){
-				$estime = trim($row[$colmap["start-time"]]);
+			$namestr = trim($row[$colmap["name"]]);
+			if(strlen($namestr)==0) return "CSV: Missing 'name' value";
+			$event->name = $namestr;
+
+			$starttime = array( "hour"=>0, "minute"=>0, "second"=>0 );
+			if(array_key_exists("start-time",$colmap)){					
+				$starttstr = trim($row[$colmap["start-time"]]);
+				if(strlen($starttstr) > 0){
+					if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$starttstr)){
+						return "CSV: Invalid start time format - expected 'hh:mm'";
+					}
+					$bits = explode(":",$starttstr);
+					$starttime = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+				}
 			}
-			if(strlen($estime)==0) $estime = "00:00";
-			if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$estime)) return "CSV: Invalid time format - expected 'hh:mm'";
-			$bits = explode(":",$estime);
-			$time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
 			
-			$esdate = trim($row[$colmap["start-date"]]);
-			if(strlen($esdate)==0) return "CSV: Missing 'start-date' value";
-			if(preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$esdate)){
-				$bits = explode("-",$esdate);
-				$event->date = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
-				$event->time = $time;
+			$startdate = NULL;
+			$startdstr = trim($row[$colmap["start-date"]]);
+			if(strlen($startdstr)==0) return "CSV: Missing 'start-date' value";
+			if(preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$startdstr)){
+				$bits = explode("-",$startdstr);
+				$startdate = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
+				$event->date = $startdate;
+				$event->time = $starttime;
 			}else{
 				$parser = new RecurrenceParser();
-				$edate = $parser->parse(strtolower($esdate),$time);
-				if($edate===FALSE) return "CSV: Invalid date format - expected 'yyyy-mm-dd' or recurrence syntax";
-				$event->recurrence = array( $esdate );
+				$recur = $parser->parse(strtolower($startdstr),$starttime);
+				if($recur===FALSE){
+					return "CSV: Invalid start date format - expected 'yyyy-mm-dd' or recurrence syntax";
+				}
+				$event->recurrence = array( $recur );
 			}
 			
-			$eetime = "";
 			$endtime = NULL;
 			if(array_key_exists("end-time",$colmap)){
-				$eetime = trim($row[$colmap["end-time"]]);
-				if(strlen($eetime)!=0 && preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$eedate)){
-					$bits = explode(":",$eedate);
+				$endtstr = trim($row[$colmap["end-time"]]);
+				if(strlen($endtstr) > 0){
+					if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$endtstr)){
+						return "CSV: Invalid end time format - expected 'hh:mm'";
+					}
+					$bits = explode(":",$endtstr);
 					$endtime = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
 				}	
 			}
 			
 			$enddate = NULL;
 			if(array_key_exists("end-date",$colmap)){
-				$eedate = trim($row[$colmap["end-date"]]);
-				if(strlen($eedate)!=0 && preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$eedate)){
-					$bits = explode("-",$eedate);
+				$enddstr = trim($row[$colmap["end-date"]]);
+				if(strlen($enddstr) > 0){
+					if(!preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$enddstr)){
+						return "CSV: Invalid end date format - expected 'yyyy-mm-dd'";
+					}
+					$bits = explode("-",$enddstr);
 					$enddate = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
 				}
 			}
 			
-			if($enddate !== NULL){
+			if($startdate !== NULL && ($enddate !== NULL || $endtime != NULL)){
+				
+				$diffend_d = $enddate===NULL ? $startdate : $enddate;
+				$diffend_t = $endtime===NULL ? array("hour"=>23,"minute"=>59,"second"=>59) : $endtime;
+				$event->duration = calc_approx_diff($startdate,$starttime,$diffend_d,$diffend_t);
 			
-				// TODO: calc duration from end date
-			
-			}else{									
-				$eduration = "";
+			}else{
+				$eduration = array( "days"=>1, "hours"=>0, "minutes"=>0, "seconds"=>0 );
 				if(array_key_exists("duration",$colmap)){
-					$eduration = strtolower(trim($row[$colmap["duration"]]));
+					$durstr = strtolower(trim($row[$colmap["duration"]]));
+					if(strlen($durstr) > 0){
+						$eduration = parse_duration($durstr);
+						if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";		
+					}
 				}
-				if(strlen($eduration)==0) $eduration = "1d";
-				$eduration = parse_duration($eduration);
-				if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";
 				$event->duration = $eduration;
 			}
 			
 			if(array_key_exists("description",$colmap)){
-				$event->description = trim($row[$colmap["description"]]);
+				$descstr = trim($row[$colmap["description"]]);
+				if(strlen($decstr) > 0){
+					$event->description = $descstr;
+				}
 			}
 			
 			if(array_key_exists("url",$colmap)){
-				$event->url = trim($row[$colmap["url"]]);
+				$urlstr = trim($row[$colmap["url"]]);
+				if(strlen($urlstr) > 0){
+					$event->url = $urlstr;
+				}
 			}
 			
 			if(isset($event->recurrence)){
