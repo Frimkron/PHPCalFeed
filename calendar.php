@@ -1,9 +1,10 @@
 <?php
 
-// TODO: Outlook CSV export
-//		Looser date parsing using strtotime
-//		Looser header names
-//		Separate tab-separated format
+// TODO: events spanning multiple months not displayed in html properly, sometimes
+// TODO: events which started in the past but are still ongoing are excluded from feeds
+// TODO: write up Outlook import
+// TODO: write up delimiter parameter
+// TODO: write up flexible date formats
 // TODO: better url handling - check status code
 // TODO: test output in different timezone
 
@@ -32,7 +33,7 @@ abstract class InputFormat {
 	/*	name
 		description
 		url
-		events	
+		events (required)
 			name (required)
 			date (required) (year,month,day)
 			time (hour, minute, second)
@@ -100,42 +101,6 @@ abstract class HtmlInputBase extends InputFormat {
 		(no recurring)
 		Defaults to hcalendar spec
 	*/
-	
-	public function __construct(){	
-		$T_FRAC = "\\.[0-9]+";
-		$T_hh = "(0?[1-9]|1[0-2])";
-		$T_HH = "([01][0-9]|2[0-4])";
-		$T_MERID = "[AaPp]\\.?[Mm]\\.?";
-		$T_MM = "[0-5][0-9]";
-		$T_ll = "[0-9][0-9]";
-		$T_SPACE = "[ \\t]";
-		$T_TZ = "(\\(?[A-Za-z]{1,6}\\)?|[A-Z][a-z]+([_\/][A-Z][a-z]+)+)";
-		$T_TZC = "(GMT)?[+-]$T_hh:?($T_MM)?";
-		$this->TIME_PATTERN = "(".implode("|",array(
-			$T_hh."(".$T_SPACE.")?".$T_MERID,
-			$T_hh."[.:]".$T_MM."(".$T_SPACE.")?".$T_MERID,
-			$T_hh."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?".$T_MERID,
-			$T_hh.":".$T_MM.":".$T_ll."[.:][0-9]+".$T_MERID,
-			"[Tt]?".$T_HH."[.:]".$T_MM,
-			"[Tt]?".$T_HH.$T_MM,
-			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll,
-			"[Tt]?".$T_HH.$T_MM.$T_ll,
-			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?(".$T_TZC."|".$T_TZ.")",
-			"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll.$T_FRAC,
-			"(".$T_TZ."|".$T_TZC.")"
-		)).")";
-		$this->DURATION_PATTERN = "(".implode("|",array(
-			// P 1Yr 4 days t 8m
-			"[Pp]?" . "\\s*" . "(?:(\\d+)\\s*[Yy](?:(?:ea)?rs?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Mm](?:(?:on)?ths?)?)?"
-				. "\\s*" . "(?:(\\d+)\\s*[Ww](?:(?:ee)?ks?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Dd](?:a?ys?)?)?" 
-				. "\\s*" . "[Tt]?" . "\\s*" . "(?:(\\d+)\\s*[Hh](?:(?:ou)?rs?)?)?" 
-				. "\\s*" . "(?:(\\d+)\\s*[Mm](?:in(?:ute)?s?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Ss](?:sec(?:ond)?s?)?)?",
-			// 0000-01-00 t 09:20
-			"[Pp]?" . "(\\d+)-(\\d+)-(\\d+)" . "\\s*" . "(?:" . "[Tt ]" . "\\s*" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?" . ")",
-			// p 00:02:00
-			"[Pp]?" . "\\s*" . "[Tt]?" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?"
-		)).")";
-	}
 	
 	protected function is_available(){
 		return extension_loaded("libxml") && extension_loaded("dom");
@@ -207,36 +172,9 @@ abstract class HtmlInputBase extends InputFormat {
 		$results = $this->get_xpath_result($node,$context,$xpath);
 		foreach($results as $result){
 			$text = $result->nodeValue;
-			if(strlen(trim($text))==0) continue;
-			$matches = array();
-			if(!preg_match("/^\\s*".$this->DURATION_PATTERN."\\s*$/",$text,$matches)) continue;
-			if(sizeof($matches) == 1) continue;			
-			if(sizeof($matches) <= 8){
-				// words format
-				$years = 0;   if(sizeof($matches) >= 1+1 && $matches[1+1] != "") $years = (int)$matches[1+1];
-				$months = 0;  if(sizeof($matches) >= 1+2 && $matches[1+2] != "") $months = (int)$matches[1+2];
-				$weeks = 0;   if(sizeof($matches) >= 1+3 && $matches[1+3] != "") $weeks = (int)$matches[1+3];
-				$days = 0;    if(sizeof($matches) >= 1+4 && $matches[1+4] != "") $days = (int)$matches[1+4];
-				$hours = 0;   if(sizeof($matches) >= 1+5 && $matches[1+5] != "") $hours = (int)$matches[1+5];
-				$minutes = 0; if(sizeof($matches) >= 1+6 && $matches[1+6] != "") $minutes = (int)$matches[1+6];
-				$seconds = 0; if(sizeof($matches) >= 1+7 && $matches[1+7] != "") $seconds = (int)$matches[1+7];				
-				return approx_duration($years,$months,$weeks,$days,$hours,$minutes,$seconds);				
-			}elseif(sizeof($matches) == 14){
-				// iso datetime format
-				$years = 0;   if(sizeof($matches) >= 1+7+1 && $matches[1+7+1] != "") $years = (int)$matches[1+7+1];
-				$months = 0;  if(sizeof($matches) >= 1+7+2 && $matches[1+7+2] != "") $months = (int)$matches[1+7+2];
-				$days = 0;    if(sizeof($matches) >= 1+7+3 && $matches[1+7+3] != "") $days = (int)$matches[1+7+3];
-				$hours = 0;   if(sizeof($matches) >= 1+7+4 && $matches[1+7+4] != "") $hours = (int)$matches[1+7+4];
-				$minutes = 0; if(sizeof($matches) >= 1+7+5 && $matches[1+7+5] != "") $minutes = (int)$matches[1+7+5];
-				$seconds = 0; if(sizeof($matches) >= 1+7+6 && $matches[1+7+6] != "") $seconds = (int)$matches[1+7+6];
-				return approx_duration($years,$months,0,$days,$hours,$minutes,$seconds);
-			}else{
-				// iso time only format
-				$hours = 0;   if(sizeof($matches) >= 1+7+6+1 && $matches[1+7+6+1] != "") $hours = (int)$matches[1+7+6+1];
-				$minutes = 0; if(sizeof($matches) >= 1+7+6+2 && $matches[1+7+6+2] != "") $minutes = (int)$matches[1+7+6+2];
-				$seconds = 0; if(sizeof($matches) >= 1+7+6+3 && $matches[1+7+6+3] != "") $seconds = (int)$matches[1+7+6+3];
-				return approx_duration(0,0,0,0,$hours,$minutes,$seconds);
-			}
+			$duration = parse_duration($text);
+			if($duration===FALSE) continue;
+			return $duration;
 		}
 		return FALSE;
 	}
@@ -248,40 +186,28 @@ abstract class HtmlInputBase extends InputFormat {
 		$results = $this->get_xpath_result($node,$context,$xpath);
 		foreach($results as $result){
 			$text = $result->nodeValue;
-			if(strlen(trim($text))==0) continue;
-			if(preg_match("/^\\s*".$this->TIME_PATTERN."\\s*$/",$text)){
-				// time without date found - override existing time
-				// if it was part of a datetime as it may have been the
-				// default time
-				$parsed = strtotime($text);
-				if($parsed===FALSE) continue;
-				$cal = new Calendar($parsed);
+			$parsed = parse_time($text);
+			if($parsed!==FALSE){
+				// time without date found - override existing time if it was part of 
+				// a datetime as it may have been the default time
 				if(!$gotspectime){
-					$time = array( 
-						"hour"=>(int)$cal->get_hour(), 
-						"minute"=>(int)$cal->get_minute(), 
-						"second"=>(int)$cal->get_second() );
+					$time = array( "hour"=>$parsed["hour"], "minute"=>$parsed["minute"],
+						"day"=>$parsed["day"] );
 					$gotspectime = TRUE;
 					if($date!==NULL && $time!==NULL) break;
 				}
 			}else{
-				$parsed = strtotime($text);
+				$parsed = parse_datetime($text);
 				if($parsed===FALSE) continue;
-				$cal = new Calendar($parsed);
 				if($date===NULL){
-					$date = array(
-						"year"=>(int)$cal->get_year(),
-						"month"=>(int)$cal->get_month(),
-						"day"=>(int)$cal->get_day() );
+					$date = array( "year"=>$parsed["year"], "month"=>$parsed["month"], 
+						"day"=>$parsed["day"] );
 				}
 				if($time===NULL){
-					$time = array(
-						"hour"=>(int)$cal->get_hour(),
-						"minute"=>(int)$cal->get_minute(),
-						"second"=>(int)$cal->get_second() );
+					$time = array( "hour"=>$parsed["hour"], "minute"=>$parsed["minute"],
+						"second"=>$parsed["second"] );
 				}
-				// don't break, as we might find a more specific
-				// time value
+				// don't break, as we might find a more specific time value
 			}
 		}
 		if($date===NULL || $time===NULL) return FALSE;
@@ -898,9 +824,9 @@ abstract class CsvInputBase extends InputFormat {
 		"duration" 		=> "/^\\s*(dur(ation)?|length)\\s*$/i",
 	);
 
-	protected function stream_to_event_data($handle){
+	protected function stream_to_event_data($handle,$delimiter){
 	
-		$header = @fgetcsv($handle);
+		$header = @fgetcsv($handle,0,$delimiter);
 		if($header === FALSE){
 			return "CSV: Failed to read header row";
 		}
@@ -925,7 +851,7 @@ abstract class CsvInputBase extends InputFormat {
 		$data->events= array();
 		$data->{"recurring-events"} = array();
 		
-		while( ($row = fgetcsv($handle)) !== FALSE ){
+		while( ($row = fgetcsv($handle,0,$delimiter)) !== FALSE ){
 			if(sizeof($row)==0 || (sizeof($row)==1 && $row[0]==NULL)) continue; # ignore blank lines
 			while(sizeof($row) < sizeof($colmap)) array_push($row,"");
 		
@@ -939,27 +865,31 @@ abstract class CsvInputBase extends InputFormat {
 			if(array_key_exists("start-time",$colmap)){					
 				$starttstr = trim($row[$colmap["start-time"]]);
 				if(strlen($starttstr) > 0){
-					if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$starttstr)){
-						return "CSV: Invalid start time format - expected 'hh:mm'";
-					}
-					$bits = explode(":",$starttstr);
-					$starttime = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+					$parsed = parse_time($starttstr);
+					if($parsed===FALSE) return "CSV: Invalid start time format - expected 'hh:mm' or similar";
+					$starttime = $parsed;
 				}
 			}
 			
 			$startdate = NULL;
 			$startdstr = trim($row[$colmap["start-date"]]);
 			if(strlen($startdstr)==0) return "CSV: Missing 'start-date' value";
-			if(preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$startdstr)){
-				$bits = explode("-",$startdstr);
-				$startdate = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
-				$event->date = $startdate;
-				$event->time = $starttime;
+			$parsed = parse_datetime($startdstr);
+			if($parsed!==FALSE){
+				$startdate = $parsed;			
+				$event->date = array( "year"=>$startdate["year"], "month"=>$startdate["month"], 
+						"day"=>$startdate["day"] );
+				if($starttime["hour"]!=0 || $starttime["minute"]!=0 || $starttime["second"]!=0){
+					$event->time = $starttime;
+				}else{
+					$event->time = array( "hour"=>$startdate["hour"], "minute"=>$startdate["minute"],
+							"second"=>$startdate["second"] );
+				}
 			}else{
 				$parser = new RecurrenceParser();
 				$recur = $parser->parse(strtolower($startdstr),$starttime);
 				if($recur===FALSE){
-					return "CSV: Invalid start date format - expected 'yyyy-mm-dd' or recurrence syntax";
+					return "CSV: Invalid start date format - expected date ('yyyy-mm-dd' or similar), or recurrence syntax";
 				}
 				$event->recurrence = array( $recur );
 			}
@@ -968,11 +898,9 @@ abstract class CsvInputBase extends InputFormat {
 			if(array_key_exists("end-time",$colmap)){
 				$endtstr = trim($row[$colmap["end-time"]]);
 				if(strlen($endtstr) > 0){
-					if(!preg_match("/^\\s*\\d{1,2}:\\d{2}\\s*$/",$endtstr)){
-						return "CSV: Invalid end time format - expected 'hh:mm'";
-					}
-					$bits = explode(":",$endtstr);
-					$endtime = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
+					$parsed = parse_time($endtstr);
+					if($parsed===FALSE) return "CSV: Invalid end time format - expected 'hh:mm' or similar";
+					$endtime = $parsed;
 				}	
 			}
 			
@@ -980,18 +908,21 @@ abstract class CsvInputBase extends InputFormat {
 			if(array_key_exists("end-date",$colmap)){
 				$enddstr = trim($row[$colmap["end-date"]]);
 				if(strlen($enddstr) > 0){
-					if(!preg_match("/^\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*$/",$enddstr)){
-						return "CSV: Invalid end date format - expected 'yyyy-mm-dd'";
+					$parsed = parse_datetime($enddstr);
+					if($parsed===FALSE) return "CSV: Invalid end date format - expected 'yyyy-mm-dd' or similar";
+					$enddate = array( "year"=>$parsed["year"], "month"=>$parsed["month"], 
+							"day"=>$parsed["day"] );
+					if($endtime===NULL){
+						$endtime = array( "hour"=>$parsed["hour"], "minute"=>$parsed["minute"], 
+								"second"=>$parsed["second"] );
 					}
-					$bits = explode("-",$enddstr);
-					$enddate = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
 				}
 			}
 			
-			if($startdate !== NULL && ($enddate !== NULL || $endtime != NULL)){
+			if($startdate !== NULL && ($enddate !== NULL || $endtime !== NULL)){
 				
 				$diffend_d = $enddate===NULL ? $startdate : $enddate;
-				$diffend_t = $endtime===NULL ? array("hour"=>23,"minute"=>59,"second"=>59) : $endtime;
+				$diffend_t = $endtime; // must be non-null
 				$event->duration = calc_approx_diff($startdate,$starttime,$diffend_d,$diffend_t);
 			
 			}else{
@@ -1000,7 +931,8 @@ abstract class CsvInputBase extends InputFormat {
 					$durstr = strtolower(trim($row[$colmap["duration"]]));
 					if(strlen($durstr) > 0){
 						$eduration = parse_duration($durstr);
-						if($eduration === FALSE) return "CSV: Invalid duration format - expected '[0d][0h][0m]'";		
+						error_log("parsed duration");
+						if($eduration === FALSE) return "CSV: Invalid duration format - expected '0d 1h 30m' or similar'";
 					}
 				}
 				$event->duration = $eduration;
@@ -1008,7 +940,7 @@ abstract class CsvInputBase extends InputFormat {
 			
 			if(array_key_exists("description",$colmap)){
 				$descstr = trim($row[$colmap["description"]]);
-				if(strlen($decstr) > 0){
+				if(strlen($descstr) > 0){
 					$event->description = $descstr;
 				}
 			}
@@ -1036,16 +968,17 @@ class LocalCsvInput extends CsvInputBase {
 
 	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
 		if($formatname != "csv-local") return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
 	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv-local"));
+		$result = write_config($scriptname,array("format"=>"csv-local", "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1054,7 +987,7 @@ class LocalCsvInput extends CsvInputBase {
 		return "$scriptname-master.csv";
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
+	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$delimiter){
 		$filename = $this->get_filename($scriptname);
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
 		
@@ -1062,7 +995,7 @@ class LocalCsvInput extends CsvInputBase {
 		if($handle === FALSE){
 			return "CSV: File '$filename' not found";
 		}		
-		$result = $this->stream_to_event_data($handle);
+		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);
 		
 		return $result;
@@ -1075,7 +1008,8 @@ class RemoteCsvInput extends CsvInputBase {
 	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
 		if($formatname != "csv-remote") return FALSE;
 		if(!isset($config["url"])) return "CSV: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1083,21 +1017,21 @@ class RemoteCsvInput extends CsvInputBase {
 	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".csv") return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv-remote","url"=>$config["url"]));
+		$result = write_config($scriptname,array("format"=>"csv-remote","url"=>$config["url"], "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
+	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$delimiter){
 		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
 		
 		$handle = @fopen($url,"r");
 		if($handle === FALSE){
 			return "CSV: Could not open '$url'";
 		}
-		$result = $this->stream_to_event_data($handle);
+		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);
 		return $result;
 	}
@@ -1108,6 +1042,26 @@ abstract class JsonInputBase extends InputFormat {
 
 	protected function is_available(){
 		return extension_loaded("mbstring") && extension_loaded("json");
+	}
+
+	protected function convert_event_properties(&$item){
+		if(!isset($item->name)){
+			return "JSON: Missing event name";
+		}
+		if(isset($item->time)){
+			$parsed = parse_time($item->time);
+			if($parsed===FALSE) return "JSON: Invalid time format - expected \"hh:mm\" or similar";
+			$item->time = $parsed;								
+		}else{
+			$item->time = array( "hour"=>0, "minute"=>0, "second"=>0 );
+		}
+		if(isset($item->duration)){
+			$parsed = parse_duration($item->duration);
+			if($parsed===FALSE) return "JSON: Invalid duration - expected \"0d 1h 30m\" or similar";
+			$item->duration = $parsed;
+		}else{
+			$item->duration = array( "days"=>1, "hours"=>0, "minutes"=>0, "seconds"=>0 );
+		}
 	}
 
 	protected function stream_to_event_data($handle){
@@ -1127,34 +1081,18 @@ abstract class JsonInputBase extends InputFormat {
 				return "JSON: Expected events to be array";
 			}
 			foreach($data->events as $item){
-				if(!isset($item->name)){
-					return "JSON: Missing event name";
-				}
-				if(!isset($item->time)){
-					$item->time = "00:00";
-				}
-				if(!preg_match("/^\d{2}:\d{2}$/",$item->time)){
-					return "JSON: Invalid time format - expected \"hh:mm\"";
-				}
-				$bits = explode(":",$item->time);
-				$item->time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
-				$date_pattern = "/^\d{4}-\d{1,2}-\d{1,2}$/";
-				if(!isset($item->date)){
-					return "JSON: Missing event date";
-				}
-				if(!preg_match("/^\d{4}-\d{1,2}-\d{1,2}$/",$item->date)){
-					return "JSON: Invalid date format - expected \"yyyy-mm-dd\"";
-				}
-				$bits = explode("-",$item->date);
-				$item->date = array( "year"=>$bits[0], "month"=>$bits[1], "day"=>$bits[2] );
-				if(!isset($item->duration)){
-					$item->duration = "1d";
-				}
-				$result = parse_duration(strtolower($item->duration));
-				if($result===FALSE){
-					return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
-				}
-				$item->duration = $result;				
+				$result = $this->convert_event_properties($item);
+				if(is_string($result)) return $result;
+				
+				if(!isset($item->date)) return "JSON: Missing event date";
+				$parsed = parse_datetime($item->date);
+				if($parsed===FALSE) return "JSON: Invalid date format - expected \"yyyy-mm-dd\" or similar";
+				$item->date = array( "year"=>$parsed["year"], "month"=>$parsed["month"], 
+						"day"=>$parsed["day"] );
+				if($item->time["hour"]==0 && $item->time["minute"]==0 && $item->time["second"]==0){
+					$item->time = array( "hour"=>$parsed["hour"], "minute"=>$parsed["minute"],
+							"second"=>$parsed["second"] );
+				}				
 			}
 		}
 		if(isset($data->{"recurring-events"})){
@@ -1162,31 +1100,14 @@ abstract class JsonInputBase extends InputFormat {
 				return "JSON: Expected recurring-events to be array";
 			}
 			foreach($data->{"recurring-events"} as $item){
-				if(!isset($item->name)){
-					return "JSON: Missing recurring-event name";
-				}
-				if(!isset($item->time)){
-					$item->time = "00:00";
-				}
-				if(!preg_match("/^\d{1,2}:\d{2}$/",$item->time)){
-					return "JSON: Invalid time format - expected \"hh:mm\"";
-				}
-				$bits = explode(":",$item->time);
-				$time = array( "hour"=>$bits[0], "minute"=>$bits[1], "second"=>0 );
-				unset($item->time);
-				if(!isset($item->duration)){
-					$item->duration = "1d";
-				}
-				$result = parse_duration(strtolower($item->duration));
-				if($result===FALSE){
-					return "JSON: Invalid duration - expected \"[0d][0h][0m]\"";
-				}
-				$item->duration = $result;
+				$result = $this->convert_event_properties($item);
+				if(is_string($result)) return $result;
+				
 				if(!isset($item->recurrence)){
 					return "JSON: Missing event recurrence";
 				}
 				$parser = new RecurrenceParser();
-				$result = $parser->parse(strtolower($item->recurrence,$time));
+				$result = $parser->parse(strtolower($item->recurrence,$item->time));
 				if($result===FALSE){
 					return "JSON: Invalid event recurrence syntax";
 				}
@@ -1817,7 +1738,7 @@ class ICalendarOutput extends OutputFormat {
 		}
 		fwrite($handle,"BEGIN:VCALENDAR\r\n");
 		fwrite($handle,"VERSION:2.0\r\n");
-		fwrite($handle,"PRODID:-//Mark Frimston//Calendar Script//EN\r\n");
+		fwrite($handle,"PRODID:-//Mark Frimston//PHPCalFeed//EN\r\n");
 		fwrite($handle,"CALSCALE:GREGORIAN\r\n");
 		fwrite($handle,"METHOD:PUBLISH\r\n");
 		if(isset($data->name)){
@@ -3886,18 +3807,6 @@ class Calendar {
 	}
 }
 
-function parse_duration($input){
-	if(strlen(trim($input))==0) return FALSE;
-	$matches = array();
-	if(!preg_match("/^\s*(?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*$/",$input,$matches)) return FALSE;
-	return array(
-		"days"		=> (sizeof($matches) > 1 && $matches[1]) ? $matches[1] : 0,
-		"hours"		=> (sizeof($matches) > 2 && $matches[2]) ? $matches[2] : 0,
-		"minutes"	=> (sizeof($matches) > 3 && $matches[3]) ? $matches[3] : 0,
-		"seconds"	=> 0
-	);
-}
-
 function character_encoding_of_output(){
 	return extension_loaded("mbstring") ? "UTF-8" : "Windows-1252";
 }
@@ -3942,27 +3851,29 @@ function generate_events($data){
 	$endthres = $startthres + 2*365*24*60*60;
 	
 	// recurring events
-	$max_recurring = 1000;
-	foreach($data->{"recurring-events"} as $item){
-		$dates = array();
-		foreach($item->recurrence as $rec){
-			$maxdates = round($max_recurring/sizeof($data->{"recurring-events"})/sizeof($item->recurrence));
-			$recdates = array();
-			evaluate_recurrence($rec,$startthres,$endthres,$maxdates,function($timestamp) use (&$recdates){
-				array_push($recdates,$timestamp);
-			});
-			$dates = array_unique(array_merge($dates,$recdates));
-		}
-		if(isset($item->excluding)){
-			foreach($item->excluding as $exc){
-				evaluate_recurrence($exc,$startthres,$endthres,999999,function($timestamp) use (&$dates){
-					$found = array_search($timestamp,$dates);
-					if($found!==FALSE) unset($dates[$found]);
+	if(isset($data->{"recurring-events"})){
+		$max_recurring = 1000;
+		foreach($data->{"recurring-events"} as $item){
+			$dates = array();
+			foreach($item->recurrence as $rec){
+				$maxdates = round($max_recurring/sizeof($data->{"recurring-events"})/sizeof($item->recurrence));
+				$recdates = array();
+				evaluate_recurrence($rec,$startthres,$endthres,$maxdates,function($timestamp) use (&$recdates){
+					array_push($recdates,$timestamp);
 				});
+				$dates = array_unique(array_merge($dates,$recdates));
 			}
-		}
-		foreach($dates as $date){
-			array_push($events,make_event($item, $date, $item->duration));
+			if(isset($item->excluding)){
+				foreach($item->excluding as $exc){
+					evaluate_recurrence($exc,$startthres,$endthres,999999,function($timestamp) use (&$dates){
+						$found = array_search($timestamp,$dates);
+						if($found!==FALSE) unset($dates[$found]);
+					});
+				}
+			}
+			foreach($dates as $date){
+				array_push($events,make_event($item, $date, $item->duration));
+			}
 		}
 	}
 	
@@ -4434,8 +4345,104 @@ function calc_approx_diff($startdate,$starttime,$enddate,$endtime){
 // returns duration as array( "days"=>d, "hours"=>h, "minutes"=>m, "seconds"=>s ),
 // but not accurate for numbers of years or months.
 function approx_duration($years,$months,$weeks,$days,$hours,$minutes,$seconds){
-	return array( "days"=>round($years*365.25 + $months*30.5 + $days),
+	return array( "days"=>round($years*365.25 + $months*30.5 + $weeks*7 + $days),
 					"hours"=>$hours, "minutes"=>$minutes, "seconds"=>$seconds );
+}
+
+$T_FRAC = "\\.[0-9]+";
+$T_hh = "(0?[1-9]|1[0-2])";
+$T_HH = "([01][0-9]|2[0-4])";
+$T_MERID = "[AaPp]\\.?[Mm]\\.?";
+$T_MM = "[0-5][0-9]";
+$T_ll = "[0-9][0-9]";
+$T_SPACE = "[ \\t]";
+$T_TZ = "(\\(?[A-Za-z]{1,6}\\)?|[A-Z][a-z]+([_\/][A-Z][a-z]+)+)";
+$T_TZC = "(GMT)?[+-]$T_hh:?($T_MM)?";
+$TIME_PATTERN = "(".implode("|",array(
+	$T_hh."(".$T_SPACE.")?".$T_MERID,
+	$T_hh."[.:]".$T_MM."(".$T_SPACE.")?".$T_MERID,
+	$T_hh."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?".$T_MERID,
+	$T_hh.":".$T_MM.":".$T_ll."[.:][0-9]+".$T_MERID,
+	"[Tt]?".$T_HH."[.:]".$T_MM,
+	"[Tt]?".$T_HH.$T_MM,
+	"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll,
+	"[Tt]?".$T_HH.$T_MM.$T_ll,
+	"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll."(".$T_SPACE.")?(".$T_TZC."|".$T_TZ.")",
+	"[Tt]?".$T_HH."[.:]".$T_MM."[.:]".$T_ll.$T_FRAC,
+	"(".$T_TZ."|".$T_TZC.")"
+)).")";
+
+// Parse a date and time from a string representation, allowing a wide variety of formats. 
+// Returns array( "year"=>y, "month"=>m, "day"=>d, "hour"=>h, "minute"=>m, "second"=>s )
+// or FALSE if no date or time found. 
+function parse_datetime($datestr){
+	$parsed = strtotime(trim($datestr));
+	if($parsed===FALSE) return FALSE;
+	$cal = new Calendar($parsed);
+	return array( "year"=>(int)$cal->get_year(), "month"=>(int)$cal->get_month(), "day"=>(int)$cal->get_day(),
+		"hour"=>(int)$cal->get_hour(), "minute"=>(int)$cal->get_minute(), "second"=>(int)$cal->get_second() );
+}
+
+// Parse a time from a string representation, allowing a wide variety of formats.
+// Returns array( "hour"=>h, "minute"=>m, "second"=>s ) or FALSE if no time found.
+// In particular, will return FALSE if string is a full date in addition to time.
+function parse_time($timestr){
+	global $TIME_PATTERN;
+	$timestr = trim($timestr);
+	if(!preg_match("/^\\s*".$TIME_PATTERN."\\s*$/",$timestr)) return FALSE;
+	$parsed = strtotime($timestr);
+	if($parsed===FALSE) return FALSE;
+	$cal = new Calendar($parsed);
+	return array( "hour"=>(int)$cal->get_hour(), "minute"=>(int)$cal->get_minute(), 
+			"second"=>(int)$cal->get_second() );
+}
+
+$DURATION_PATTERN = "(?:".implode("|",array(
+	// P 1Yr 4 days t 8m
+	"[Pp]?" . "\\s*" . "(?:(\\d+)\\s*[Yy](?:(?:ea)?rs?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Mm](?:(?:on)?ths?)?)?"
+		. "\\s*" . "(?:(\\d+)\\s*[Ww](?:(?:ee)?ks?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Dd](?:a?ys?)?)?" 
+		. "\\s*" . "[Tt]?" . "\\s*" . "(?:(\\d+)\\s*[Hh](?:(?:ou)?rs?)?)?" 
+		. "\\s*" . "(?:(\\d+)\\s*[Mm](?:in(?:ute)?s?)?)?" . "\\s*" . "(?:(\\d+)\\s*[Ss](?:sec(?:ond)?s?)?)?",
+	// 0000-01-00 t 09:20
+	"[Pp]?" . "(\\d+)-(\\d+)-(\\d+)" . "\\s*" . "(?:" . "[Tt ]" . "\\s*" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?" . ")",
+	// p 00:02:00
+	"[Pp]?" . "\\s*" . "[Tt]?" . "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?"
+)).")";
+
+// Parse a duration from a string representation, allowing a wide variety for formats. Returns 
+// array( "days"=>d, "hours"=>h, "minutes"=>m, "seconds"=>s ) or FALSE if no duration found. 
+// Result is an approximation for units larger than a day.
+function parse_duration($durstr){
+	global $DURATION_PATTERN;
+	$matches = array();
+	if(!preg_match("/^\\s*".$DURATION_PATTERN."\\s*$/",trim($durstr),$matches)) return FALSE;
+	if(sizeof($matches) == 1) return FALSE;
+	if(sizeof($matches) <= 1+7){
+		// words format
+		$years = 0;   if(sizeof($matches) > 1+0 && $matches[1+0] != "") $years = (int)$matches[1+0];
+		$months = 0;  if(sizeof($matches) > 1+1 && $matches[1+1] != "") $months = (int)$matches[1+1];
+		$weeks = 0;   if(sizeof($matches) > 1+2 && $matches[1+2] != "") $weeks = (int)$matches[1+2];
+		$days = 0;    if(sizeof($matches) > 1+3 && $matches[1+3] != "") $days = (int)$matches[1+3];
+		$hours = 0;   if(sizeof($matches) > 1+4 && $matches[1+4] != "") $hours = (int)$matches[1+4];
+		$minutes = 0; if(sizeof($matches) > 1+5 && $matches[1+5] != "") $minutes = (int)$matches[1+5];
+		$seconds = 0; if(sizeof($matches) > 1+6 && $matches[1+6] != "") $seconds = (int)$matches[1+6];				
+		return approx_duration($years,$months,$weeks,$days,$hours,$minutes,$seconds);				
+	}elseif(sizeof($matches) <= 1+7+6){
+		// iso datetime format
+		$years = 0;   if(sizeof($matches) > 1+7+0 && $matches[1+7+0] != "") $years = (int)$matches[1+7+0];
+		$months = 0;  if(sizeof($matches) > 1+7+1 && $matches[1+7+1] != "") $months = (int)$matches[1+7+1];
+		$days = 0;    if(sizeof($matches) > 1+7+2 && $matches[1+7+2] != "") $days = (int)$matches[1+7+2];
+		$hours = 0;   if(sizeof($matches) > 1+7+3 && $matches[1+7+3] != "") $hours = (int)$matches[1+7+3];
+		$minutes = 0; if(sizeof($matches) > 1+7+4 && $matches[1+7+4] != "") $minutes = (int)$matches[1+7+4];
+		$seconds = 0; if(sizeof($matches) > 1+7+5 && $matches[1+7+5] != "") $seconds = (int)$matches[1+7+5];
+		return approx_duration($years,$months,0,$days,$hours,$minutes,$seconds);
+	}else{
+		// iso time only format
+		$hours = 0;   if(sizeof($matches) > 1+7+6+0 && $matches[1+7+6+0] != "") $hours = (int)$matches[1+7+6+0];
+		$minutes = 0; if(sizeof($matches) > 1+7+6+1 && $matches[1+7+6+1] != "") $minutes = (int)$matches[1+7+6+1];
+		$seconds = 0; if(sizeof($matches) > 1+7+6+2 && $matches[1+7+6+2] != "") $seconds = (int)$matches[1+7+6+2];
+		return approx_duration(0,0,0,0,$hours,$minutes,$seconds);
+	}
 }
 
 function get_config_filename($scriptname){
