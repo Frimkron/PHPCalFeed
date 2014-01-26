@@ -1,10 +1,6 @@
 <?php
 
-// TODO: events spanning multiple months not displayed in html properly, sometimes
 // TODO: events which started in the past but are still ongoing are excluded from feeds
-// TODO: write up Outlook import
-// TODO: write up delimiter parameter
-// TODO: write up flexible date formats
 // TODO: better url handling - check status code
 // TODO: test output in different timezone
 
@@ -19,6 +15,8 @@
 // TODO: yaml output
 // TODO: atom output
 // TODO: yaml output
+// TODO: s-expression input
+// TODO: s-expression output
 // TODO: textpattern api
 // TODO: web-based UI for config
 // TODO: web-based UI input
@@ -1281,10 +1279,10 @@ abstract class HtmlOutputBase extends OutputFormat {
 				
 				$cal->inc_months(1);
 			}
+
+			$currentevents = array();
 	
 			for($plusmonths=0; $plusmonths<self::SHOW_MONTHS; $plusmonths++){
-
-				$currentevents = array();
 	
 				$cal->time = $time;
 				$cal->set_day(1);
@@ -1690,6 +1688,22 @@ class JsonpOutput extends JsonOutputBase {
 		}
 		echo ");";
 	}
+}
+
+class SExpressionOutput extends OutputFormat {
+
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	
+	}
+
 }
 
 class ICalendarOutput extends OutputFormat {

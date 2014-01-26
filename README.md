@@ -79,10 +79,12 @@ populate your website's calendar.
 As an alternative to a file on your own server, PHPCalFeed can read from a file
 on a different server. This is useful if you wish to use another calendar feed
 as the input, such as a public Google calendar (see 
-[Google Calendar Input](#326-google-calendar-input) for more on this). Note 
+[Google Calendar Input](#327-google-calendar-input) for more on this). Note 
 that your URL should begin with the `http://` or `https://` protocol and 
-__not__ `webcal://`. To connect to a secure `https://` URL, the OpenSSL 
-extension must be enabled for your server's PHP installation.
+__not__ `webcal://`. In order to connect to a remote URL, the `allow_url_fopen`
+option must be enabled for your server's PHP installation. In addition, 
+connecting to a secure `https://` URL requires the OpenSSL extension to be 
+enabled for your installation.
 
 To use a remote file, create the file `calendar-config.php` in the script 
 directory, if it doesn't already exist, and define the `url` property by 
@@ -132,7 +134,7 @@ heading on the first row of the file:
 * `name` __(required)__ - the title of the event
 * `date` __(required)__ - either a one-off date in `yyyy-mm-dd` format, or the
   spec for a recurring event as described in the 
-  [Event Recurrence Specification](#327-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3210-event-recurrence-specification) section below.
   For example, `2014-02-28` or `weekly on thu`.
 * `time` _(optional)_ - the time of day at which the event starts, in the following
   24 hour time format: `hh:mm`. For example, `21:30`. Defaults to midnight.
@@ -148,6 +150,24 @@ Below is an example:
 |-----------------|-----------------------|----------|-------------------------------------|
 | Halloween Party | 2013-10-31            | 20:30    | Come and have a spooktacular time!  |
 | Cool Society    | monthly on 1st tue    | 18:00    | Monthly meetup for cool people only |
+
+PHPCalFeed can read CSV data directly from a Microsoft Outlook export. For more
+information see [Microsoft Outlook CSV Input](#329-microsoft-outlook-csv-input)
+
+By default, the script will assume the data in your CSV file is separated by 
+comma `,` characters. For other separators such as tab or semicolon, create the
+config file `calendar-config.php` if it doesn't already exist, and define the 
+delimiting character with the "delimiter", as follows:
+
+``````````````````````````````````````````` php
+
+<?php
+return array(
+	'format' => 'csv-local',
+	'delimiter' => "\t"      // a tab
+);
+
+```````````````````````````````````````````
 
 
 #### 3.2.4 JSON Input
@@ -190,7 +210,7 @@ the following properties:
 * `name` __(required)__ - the title of the event, as a string
 * `recurrence` __(required)__ - a string specifying how often the event occurs.
   For details of the format of this property see the 
-  [Event Recurrence Specification](#327-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3210-event-recurrence-specification) section below.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
   in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults to 
   midnight.
@@ -463,8 +483,40 @@ return array(
 
 ``````````````````````````````````````````````
 
+#### 3.2.9 Microsoft Outlook CSV Input
 
-#### 3.2.9 Event Recurrence Specification
+PHPCalFeed can read event data directly from a Microsft Outlook export file. To
+export your event data from Outlook, follow the instructions below. These 
+instructions are for Outlook 2010, but the process will be similar for your 
+version of Outlook.
+
+#. From the menu bar select "File"> "Open" > "Import"
+#. A wizard will appear. Choose "Export to a file" from the list and click "Next"
+#. Select "Comma Separated Values (Windows)" and click "Next"
+#. Select "Calendar" and click "Next"
+#. Click "Browse" and choose where to save the export file. Click "Next"
+#. Click "Map Custom Fields"
+#. Drag the following fields from the left box into the right box to select them:
+	* Subject
+	* Description
+	* Start Date
+	* Start Time
+	* End Date
+	* End Time
+#. Click "OK" and then "Finish"
+#. Enter the range of dates for which to export calendar events. Click "OK"
+#. Outlook will take a moment to export the data to the selected file
+#. Rename the exported file to `calendar-master.csv` if you have not done so 
+   already.
+
+Next, delete the `calendar-config.php` file in the calendar script's directory,
+if it already exists. Copy the CSV file to the same directory as the 
+`calendar.php` script on your server. Delete `calendar.html` and then visit the
+calendar script in your browser to clear the cache. Your exported events should
+be displayed.
+
+
+#### 3.2.10 Event Recurrence Specification
 
 In your input file you can specify an event that takes place on a recurring 
 schedule, such as a social gathering that happens at the same time every week. 
