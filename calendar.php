@@ -16,7 +16,6 @@
 // TODO: atom output
 // TODO: yaml output
 // TODO: s-expression input
-// TODO: s-expression output
 // TODO: textpattern api
 // TODO: web-based UI for config
 // TODO: web-based UI input
@@ -1693,17 +1692,73 @@ class JsonpOutput extends JsonOutputBase {
 class SExpressionOutput extends OutputFormat {
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
-	
+		return FALSE;	
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-	
+		if($name!="s-exp") return FALSE;
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+		if(!in_array($mimetype,array("application/x-lisp","text/x-script.lisp"))) return FALSE;
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+	}
 	
+	protected function get_filename($name){
+		return "$name.lsp";
 	}
 
+	private function escape($text){
+		return str_replace(
+			array("\n", "\r", "\""  ),
+			array("\\n","\\r","\\\""),
+			str_replace("\\","\\\\",$text));
+	}
+	
+	public function write_file_if_possible($scriptname,$data){
+		$filename = $this->get_filename($scriptname);
+		$handle = @fopen($filename,"w");
+		if($handle === FALSE){
+			return "Failed to open file $filename for writing";
+		}
+		fwrite($handle,"(calendar");
+		if(isset($data->name)){
+			fwrite($handle,"\n\t(name \"".$this->escape($data->name)."\")");
+		}
+		if(isset($data->description)){
+			fwrite($handle,"\n\t(description \"".$this->escape($data->description)."\")");
+		}
+		if(isset($data->url)){
+			fwrite($handle,"\n\t(url \"".$this->escape($data->url)."\")");
+		}
+		fwrite($handle,"\n\t(events (");
+		foreach($data->events as $event){
+			fwrite($handle,"\n\t\t(event");
+			fwrite($handle,"\n\t\t\t(name \"".$this->escape($event->name)."\")");
+			if(isset($event->description)){
+				error_log($event->description);
+				error_log($this->escape($event->description));
+				fwrite($handle,"\n\t\t\t(description \"".$this->escape($event->description)."\")");
+			}
+			if(isset($event->url)){
+				fwrite($handle,"\n\t\t\t(url \"".$this->escape($event->url)."\")");
+			}
+			fwrite($handle,"\n\t\t\t(start-time \"".date("c",$event->{"start-time"})."\")");
+			fwrite($handle,"\n\t\t\t(end-time \"".date("c",$event->{"end-time"})."\")");
+			fwrite($handle,")");
+		}
+		fwrite($handle, ")))\n");
+		fclose($handle);
+	}	
+	
+	public function output($scriptname,$params){
+		header("Content-Type: application/x-lisp; charset=".character_encoding_of_output());
+		$filename = $this->get_filename($scriptname);
+		if( @readfile($filename) === FALSE){
+			return "Error reading $filename";
+		}
+	}
 }
 
 class ICalendarOutput extends OutputFormat {
@@ -1732,9 +1787,9 @@ class ICalendarOutput extends OutputFormat {
 	
 	private function escape_text($text){
 		return str_replace(
-			array("\n", "\r", "\\",  ",",  ";"  ),
-			array("\\n","\\r","\\\\","\\,","\\;"),
-			$text);
+				array("\n", "\r", ",",  ";"  ),
+				array("\\n","\\r","\\,","\\;"),
+				str_replace("\\","\\\\",$text));
 	}
 	
 	private function escape_url($text){
@@ -1746,7 +1801,7 @@ class ICalendarOutput extends OutputFormat {
 	
 	public function write_file_if_possible($scriptname,$data){
 		$filename = $this->get_filename($scriptname);
-		$handle = fopen($filename,"w");
+		$handle = @fopen($filename,"w");
 		if($handle === FALSE){
 			return "Failed to open ".$filename." for writing";
 		}
@@ -4589,7 +4644,8 @@ $output_formats = array(
 	new JsonpOutput(),
 	new ICalendarOutput(),
 	new RssOutput(),
-	new XmlOutput()
+	new XmlOutput(),
+	new SExpressionOutput()
 );
 
 $input_formats = array(

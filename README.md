@@ -625,6 +625,9 @@ HTML format (fragment) - just the HTML for the calendar itself,
 suitable for embedding in another page. Note that to generate this output, the 
 libxml and DOM extensions must be enabled for your server's PHP installation.
 
+#### `s-exp`
+S-Expression format - a data format used by the Lisp programming language.
+
 If no `format` parameter is specified, the appropriate format will be 
 negotiated with the requesting client according to what it can support. When 
 viewing in a browser, this will typically result in full HTML format.
@@ -687,6 +690,7 @@ renaming the set of files might look like this:
 	calendar.xml
 	calendar.ics
 	calendar.rss
+	calendar.lsp
 
 But we could rename them as follows:
 
@@ -701,6 +705,7 @@ But we could rename them as follows:
 	events.xml
 	events.ics
 	events.rss
+	events.lsp
 	
 	
 ### 3.7 Re-styling the HTML Calendar
