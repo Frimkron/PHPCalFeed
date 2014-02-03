@@ -1,12 +1,17 @@
 <?php
 
-// TODO: events which started in the past but are still ongoing are excluded from feeds
-// TODO: better url handling - check status code
+// TODO: responsive design for html
+// TODO: badly-formatted config kills script
+//		Can errors be caught for imports?
+// TODO: do we cache a failure if discovered format fails e.g. http 404
+//		We don't
+//		Cache expiry time in config
+//		Cache for X minutes
 // TODO: test output in different timezone
 
+// TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
 // TODO: sql database input using pdo
-// TODO: responsive design for html
 // TODO: facebook input
 // TODO: wordpress api
 // TODO: eventbrite input
@@ -24,6 +29,7 @@
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
 // TODO: need better way to handle incrementing from start time
+
 
 abstract class InputFormat {
 
@@ -145,10 +151,11 @@ abstract class HtmlInputBase extends InputFormat {
 
 	private function resolve_single_xpath($node,$context,$xpath){
 		$results = $this->get_xpath_result($node,$context,$xpath);
+		if(is_string($results)) return $results;
 		foreach($results as $result){
 			$text = $result->nodeValue;
 			if(strlen(trim($text))==0) continue;
-			return $text;
+			return array( "text"=> $text );
 		}
 		return FALSE;
 	}
@@ -156,17 +163,19 @@ abstract class HtmlInputBase extends InputFormat {
 	private function resolve_concat_xpath($node,$context,$xpath){
 		$bits = array();
 		$results = $this->get_xpath_result($node,$context,$xpath);
+		if(is_string($results)) return $results;
 		foreach($results as $result){
 			$text = $result->nodeValue;
 			if(strlen(trim($text))==0) continue;
 			array_push($bits,trim($text));
 		}
 		if(sizeof($bits)==0) return FALSE;
-		return implode(" ",$bits);
+		return array( "text" => implode(" ",$bits) );
 	}
 	
 	private function resolve_duration_xpath($node,$context,$xpath){
 		$results = $this->get_xpath_result($node,$context,$xpath);
+		if(is_string($results)) return $results;
 		foreach($results as $result){
 			$text = $result->nodeValue;
 			$duration = parse_duration($text);
@@ -181,6 +190,7 @@ abstract class HtmlInputBase extends InputFormat {
 		$time = NULL;
 		$gotspectime = FALSE;
 		$results = $this->get_xpath_result($node,$context,$xpath);
+		if(is_string($results)) return $results;
 		foreach($results as $result){
 			$text = $result->nodeValue;
 			$parsed = parse_time($text);
@@ -211,9 +221,9 @@ abstract class HtmlInputBase extends InputFormat {
 		return array( "date"=>$date, "time"=>$time );
 	}
 	
-	protected abstract function get_calendar_url($filename_or_url,$config);
-	
-	protected function file_to_event_data($filename_or_url,$config){
+	protected abstract function get_calendar_url($resource_name,$config);
+
+	protected function stream_to_event_data($filehandle,$resource_name,$config){
 		$xp_cal_summary = "/html/head/title//text()";
 		$xp_cal_description = "/html/head/meta[@name='description']/@content";
 		$xp_cal_url = NULL;
@@ -247,44 +257,53 @@ abstract class HtmlInputBase extends InputFormat {
 			if(isset($markers["ev-duration-class"])) $xp_ev_duration = $this->std_el_contents_with_class_xp($markers["ev-duration-class"]);
 			if(isset($markers["ev-duration-xpath"])) $xp_ev_duration = $markers["ev-duration-xpath"];
 		}
+		$html = stream_get_contents($filehandle);
+		if($html===FALSE) return "HTML: Failed to read stream";
 		$doc = new DOMDocument();
-		@$doc->loadHTMLFile($filename_or_url);
-		if($doc===FALSE){
-			return "HTML: Could not open '$filename_or_url'";
-		}
+		@$doc->loadHTML($html);
+		if($doc===FALSE) return "HTML: Failed to parse page";
 		$xpath = new DOMXPath($doc);
 		$data = new stdClass();
 		$calname = $this->resolve_concat_xpath($doc->documentElement,$xpath,$xp_cal_summary);
-		if($calname!==FALSE) $data->name = $calname;
+		if(is_string($calname)) return $calname;
+		if($calname!==FALSE) $data->name = $calname["text"];
 		$caldesc = $this->resolve_concat_xpath($doc->documentElement,$xpath,$xp_cal_description);
-		if($caldesc!==FALSE) $data->description = $caldesc;
+		if(is_string($caldesc)) return $caldesc;
+		if($caldesc!==FALSE) $data->description = $caldesc["text"];
 		if($xp_cal_url!==NULL){
 			$calurl = $this->resolve_single_xpath($doc->documentElement,$xpath,$xp_cal_url);
-			if($calurl!==FALSE) $data->url = $calurl;
+			if(is_string($calurl)) return $calurl;
+			if($calurl!==FALSE) $data->url = $calurl["text"];
 		}else{
-			$data->url = $this->get_calendar_url($filename_or_url,$config);
+			$data->url = $this->get_calendar_url($resource_name,$config);
 		}
 		$event_els = $this->get_xpath_result($doc->documentElement,$xpath,$xp_event);
-		if($event_els===FALSE) return "HTML: Bad XPath expression for events";
+		if(is_string($event_els)) return $event_els;
 		$data->events = array();
 		foreach($event_els as $event_el){
 			$event = new stdClass();
 			$name = $this->resolve_concat_xpath($event_el,$xpath,$xp_ev_summary);
+			if(is_string($name)) return $name;
 			if($name===FALSE) continue;
-			$event->name = $name;
+			$event->name = $name["text"];
 			$description = $this->resolve_concat_xpath($event_el,$xpath,$xp_ev_description);
-			if($description!==FALSE) $event->description = $description;
+			if(is_string($description)) return $description;
+			if($description!==FALSE) $event->description = $description["text"];
 			$url = $this->resolve_single_xpath($event_el,$xpath,$xp_ev_url);
-			if($url!==FALSE) $event->url = $url;
+			if(is_string($url)) return $url;
+			if($url!==FALSE) $event->url = $url["text"];
 			$start = $this->resolve_date_xpath($event_el,$xpath,$xp_ev_dtstart);
+			if(is_string($start)) return $start;
 			if($start===FALSE) continue;
 			$event->date = $start["date"];
 			$event->time = $start["time"];
 			$end = $this->resolve_date_xpath($event_el,$xpath,$xp_ev_dtend);
+			if(is_string($end)) return $end;
 			if($end!==FALSE){
 				$event->duration = calc_approx_diff($event->date,$event->time,$end["date"],$end["time"]);
 			}else{
 				$duration = $this->resolve_duration_xpath($event_el,$xpath,$xp_ev_duration);
+				if(is_string($duration)) return $duration;
 				if($duration!==FALSE){
 					$event->duration = $duration;
 				}else{
@@ -330,7 +349,11 @@ class LocalHtmlInput extends HtmlInputBase {
 	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$config){
 		$filename = $this->get_filename($scriptname);
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;		
-		return $this->file_to_event_data($filename,$config);		
+		$handle = @fopen($filename);
+		if($handle===FALSE) return "HTML: failed to open '$filename'";
+		$result = $this->stream_to_event_data($handle,$filename,$config);
+		fclose($handle);
+		return $result;
 	}
 }
 
@@ -361,7 +384,11 @@ class RemoteHtmlInput extends HtmlInputBase {
 	
 	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$config){
 		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
-		return $this->file_to_event_data($url,$config);
+		$handle = http_request($url);
+		if(is_string($handle)) return "HTML: $handle";
+		$result = $this->stream_to_event_data($handle,$url,$config);
+		fclose($handle);
+		return $result;
 	}
 }
 
@@ -762,9 +789,7 @@ class LocalICalendarInput extends ICalendarInputBase {
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
 		
 		$handle = @fopen($filename,"r");
-		if($handle === FALSE){
-			return "ICalendar: File '$filename' not found";
-		}
+		if($handle === FALSE) return "ICalendar: Failed to open '$filename'";
 		$data = $this->feed_to_event_data($handle);
 		fclose($handle);
 		return $data;
@@ -797,10 +822,8 @@ class RemoteICalendarInput extends ICalendarInputBase {
 	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
 		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
 		
-		$handle = @fopen($url,"r");
-		if($handle === FALSE){
-			return "ICalendar: Could not open '$url'";
-		}
+		$handle = http_request($url);
+		if(is_string($handle)) return "ICalendar: $handle";		
 		$result = $this->feed_to_event_data($handle);
 		fclose($handle);
 		return $result;
@@ -928,7 +951,6 @@ abstract class CsvInputBase extends InputFormat {
 					$durstr = strtolower(trim($row[$colmap["duration"]]));
 					if(strlen($durstr) > 0){
 						$eduration = parse_duration($durstr);
-						error_log("parsed duration");
 						if($eduration === FALSE) return "CSV: Invalid duration format - expected '0d 1h 30m' or similar'";
 					}
 				}
@@ -989,12 +1011,9 @@ class LocalCsvInput extends CsvInputBase {
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
 		
 		$handle = @fopen($filename,"r");
-		if($handle === FALSE){
-			return "CSV: File '$filename' not found";
-		}		
+		if($handle === FALSE) return "CSV: Failed to open '$filename'";
 		$result = $this->stream_to_event_data($handle,$delimiter);
-		fclose($handle);
-		
+		fclose($handle);		
 		return $result;
 	}
 
@@ -1024,10 +1043,8 @@ class RemoteCsvInput extends CsvInputBase {
 	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$delimiter){
 		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
 		
-		$handle = @fopen($url,"r");
-		if($handle === FALSE){
-			return "CSV: Could not open '$url'";
-		}
+		$handle = http_request($url);
+		if(is_string($handle)) return "CSV: $handle";
 		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);
 		return $result;
@@ -1145,9 +1162,7 @@ class LocalJsonInput extends JsonInputBase {
 		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
 		
 		$handle = @fopen($filename,"r");
-		if($handle===FALSE){
-			return "JSON: File '$filename' not found";
-		}
+		if($handle===FALSE) return "JSON: Failed to open '$filename'";
 		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
 		return $result;
@@ -1176,11 +1191,9 @@ class RemoteJsonInput extends JsonInputBase {
 	
 	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
 		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
-		
-		$handle = @fopen($url,"r");
-		if($handle === FALSE){
-			return "JSON: Could not open '$url'";
-		}
+
+		$handle = http_request($url);
+		if(is_string($handle)) return "JSON: $handle";
 		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
 		return $result;
@@ -1451,7 +1464,8 @@ abstract class HtmlOutputBase extends OutputFormat {
 						}
 					
 					$elcalendar->appendChild($eltbody);
-				
+					
+
 				$elcontainer->appendChild($elcalendar);
 				
 			}
@@ -1504,6 +1518,13 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$eltitle->appendChild($txtitle);
 				$elhead->appendChild($eltitle);
 	
+				if(isset($data->description)){
+					$eldesc = $doc->createElement("meta");
+					$eldesc->setAttribute("name","description");
+					$eldesc->setAttribute("content",$data->description);
+					$elhead->appendChild($eldesc);
+				}
+	
 				$elcss = $doc->createElement("link");
 				$elcss->setAttribute("rel","stylesheet");
 				$elcss->setAttribute("type","text/css");
@@ -1514,6 +1535,11 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elhcal->setAttribute("rel","profile");
 				$elhcal->setAttribute("href","http://microformats.org/profile/hcalendar");
 				$elhead->appendChild($elhcal);
+	
+				$elvport = $doc->createElement("meta");
+				$elvport->setAttribute("name","viewport");
+				$elvport->setAttribute("content","width=device-width");
+				$elhead->appendChild($elvport);
 	
 			$elhtml->appendChild($elhead);
 	
@@ -1737,8 +1763,6 @@ class SExpressionOutput extends OutputFormat {
 			fwrite($handle,"\n\t\t(event");
 			fwrite($handle,"\n\t\t\t(name \"".$this->escape($event->name)."\")");
 			if(isset($event->description)){
-				error_log($event->description);
-				error_log($this->escape($event->description));
 				fwrite($handle,"\n\t\t\t(description \"".$this->escape($event->description)."\")");
 			}
 			if(isset($event->url)){
@@ -4514,6 +4538,36 @@ function parse_duration($durstr){
 	}
 }
 
+// Makes request to given url. Returns a file handle for the response on success, or 
+// an error string on failure.
+function http_request($url){
+	if(extension_loaded("curl")){
+		// use cURL, which gives us more info
+		$handle = tmpfile();
+		if($handle===FALSE) return "Failed to create temp file for HTTP response";
+		$curl = curl_init($url);
+		curl_setopt($curl, CURLOPT_FILE, $handle);
+		$success = curl_exec($curl);
+		if($success===FALSE){
+			fclose($handle);
+			return "HTTP request failed: ".curl_error($curl);
+		}
+		$status = curl_getinfo($curl,CURLINFO_HTTP_CODE);
+		if($status < 200 || $status >= 300){
+			fclose($handle);
+			return "Got HTTP status $status";
+		}
+		curl_close($curl);
+		fseek($handle,0);
+		return $handle;
+	}else{
+		// fall back to fopen
+		$handle = @fopen($url);
+		if($handle===FALSE) return "HTTP request failed";
+		return $handle;
+	}
+}
+
 function get_config_filename($scriptname){
 	return "$scriptname-config.php";
 }
@@ -4590,6 +4644,10 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats,$input
 }
 
 function attempt_handle($scriptname,$output_formats,$input_formats){
+
+	// check PHP version
+	$required = "5.3";
+	if(!version_compare(PHP_VERSION,$required,"ge")) return "PHP version $required or later required";
 
 	// included from another script
 	if(basename(__FILE__) != basename($_SERVER["SCRIPT_FILENAME"])){

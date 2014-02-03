@@ -30,10 +30,17 @@ multiple different feed formats.
 2 Requirements
 --------------
 
-* Requires a webserver serving PHP 5
+### Essential
+
+* Requires a webserver running PHP 5.3 or later
 * Requires write permission to its directory on the webserver
+
+### Optional
+
 * PHP's JSON module is required for JSON input and output
 * PHP's XML DOM module is required for XML and XHTML output
+* PHP must be configured to allow remote requests in order to use remote file input
+* PHP's OpenSSL module is required for remote requests over HTTPS
 
 
 3 User Guide
