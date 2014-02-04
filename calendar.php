@@ -1,21 +1,17 @@
 <?php
 
-// TODO: responsive design for html
 // TODO: badly-formatted config kills script
 //		Can errors be caught for imports?
-// TODO: do we cache a failure if discovered format fails e.g. http 404
-//		We don't
-//		Cache expiry time in config
-//		Cache for X minutes
 // TODO: test output in different timezone
 
+// TODO: easy-subscribe widgit
 // TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
+// TODO: CalDAV
 // TODO: sql database input using pdo
 // TODO: facebook input
 // TODO: wordpress api
 // TODO: eventbrite input
-// TODO: easy-subscribe widgit
 // TODO: yaml input
 // TODO: yaml output
 // TODO: atom output
@@ -51,27 +47,53 @@ abstract class InputFormat {
 			description
 			url				*/
 
-	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config);
+	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config);
 	
-	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config);
+	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config);
 	
-	protected function file_read_due($filename,$cachedtime,$expiretime){
-		return $cachedtime <= filemtime($filename) || $cachedtime <= $expiretime;
+	protected function file_read_due($filename,$cachedtime,$oldestinputok){
+		return $cachedtime <= filemtime($filename) || $cachedtime <= $oldestinputok;
 	}
 	
-	protected function url_read_due($cachedtime,$expiretime){
-		return $cachedtime <= $expiretime;
+	protected function url_read_due($cachedtime,$oldestinputok){
+		return $cachedtime <= $oldestinputok;
+	}
+	
+	protected function get_error_filename($scriptname){
+		return "$scriptname.error";
+	}
+	
+	protected function check_cached_error($scriptname){
+		$errorfile = $this->get_error_filename($scriptname);
+		$errortime = filemtime($errorfile);
+		error_log("error file time");
+		if($errortime===FALSE) return;
+		if(time() - $errortime > 20*60){ // error file is valid for 20 minutes
+			unlink($errorfile);
+			return;
+		}
+		$error = @file_get_contents($errorfile);
+		if($error===FALSE) return;
+		return $error;		
+	}
+	
+	protected function cache_error($scriptname,$error){
+		$errorfile = $this->get_error_filename($scriptname);
+		$handle = @fopen($errorfile,"w");
+		if($handle===FALSE) return;
+		fwrite($handle,$error);
+		fclose($handle);
 	}
 }
 
 class NoInput extends InputFormat {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "none") return FALSE;
 		return $this->get_empty_data();
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		$result = write_config($scriptname,array("format"=>"none"));
 		if($result) return $result;
 		return $this->get_empty_data();
@@ -144,7 +166,6 @@ abstract class HtmlInputBase extends InputFormat {
 
 	private function get_xpath_result($node,$context,$xpath){
 		$results = $context->query($xpath,$node);
-		// TODO: why is this not actually returning false?
 		if($results===FALSE) return "HTML: Bad XPath expression '$xpath'";
 		return $results;
 	}
@@ -320,20 +341,20 @@ abstract class HtmlInputBase extends InputFormat {
 
 class LocalHtmlInput extends HtmlInputBase {
 	
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "html-local") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!$this->is_available()) return FALSE;
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
 		$result = write_config($scriptname,array("format"=>"html-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -346,34 +367,42 @@ class LocalHtmlInput extends HtmlInputBase {
 		return "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".$filename;
 	}
 
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$config){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;		
-		$handle = @fopen($filename);
+	private function do_input($filename){
+		$handle = @fopen($filename,"r");
 		if($handle===FALSE) return "HTML: failed to open '$filename'";
 		$result = $this->stream_to_event_data($handle,$filename,$config);
 		fclose($handle);
+		return $result;
+	}
+
+	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;		
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($filename);
+		if(is_string($result)) $this->cache_error($scriptname,$result);
 		return $result;
 	}
 }
 
 class RemoteHtmlInput extends HtmlInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "html-remote") return FALSE;
 		if(!$this->is_available()) return FALSE;
 		if(!isset($config["url"])) return "HTML: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$config);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".htm" && strtolower(substr($config["url"],-5,5)) != ".html") return FALSE;
 		$result = write_config($scriptname,array("format"=>"html-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$config);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -382,12 +411,19 @@ class RemoteHtmlInput extends HtmlInputBase {
 		return $url;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$config){
-		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
+	private function do_input($url){
 		$handle = http_request($url);
 		if(is_string($handle)) return "HTML: $handle";
 		$result = $this->stream_to_event_data($handle,$url,$config);
 		fclose($handle);
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url,$config){
+		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($url);
+		if(is_string($result)) $this->cache_error($scriptname,$result);
 		return $result;
 	}
 }
@@ -764,18 +800,18 @@ abstract class ICalendarInputBase extends InputFormat {
 
 class LocalICalendarInput extends ICalendarInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "icalendar-local") return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
 		$result = write_config($scriptname,array("format"=>"icalendar-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -784,29 +820,36 @@ class LocalICalendarInput extends ICalendarInputBase {
 		return "$scriptname-master.ics";
 	}
 
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
-		
+	private function do_input($filename){
 		$handle = @fopen($filename,"r");
 		if($handle === FALSE) return "ICalendar: Failed to open '$filename'";
 		$data = $this->feed_to_event_data($handle);
 		fclose($handle);
 		return $data;
 	}
+
+	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$data = $this->do_input($filename);
+		if(is_string($data)) $this->cache_error($scriptname,$data);		
+		return $data;
+	}
 }
 
 class RemoteICalendarInput extends ICalendarInputBase {
 	
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "icalendar-remote") return FALSE;
 		if(!isset($config["url"])) return "ICalendar: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".ics"
 				&& strtolower(substr($config["url"],-5,5))  != ".ical"
@@ -814,18 +857,25 @@ class RemoteICalendarInput extends ICalendarInputBase {
 			return FALSE;
 		$result = write_config($scriptname,array("format"=>"icalendar-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
-		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
-		
+	private function do_input($url){
 		$handle = http_request($url);
 		if(is_string($handle)) return "ICalendar: $handle";		
 		$result = $this->feed_to_event_data($handle);
 		fclose($handle);
+		return $result;
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url){
+		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($url);
+		if(is_string($result)) $this->cache_error($scriptname,$result);		
 		return $result;
 	}
 	
@@ -985,19 +1035,19 @@ abstract class CsvInputBase extends InputFormat {
 
 class LocalCsvInput extends CsvInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "csv-local") return FALSE;
 		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$delimiter);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
 		$result = write_config($scriptname,array("format"=>"csv-local", "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,",");
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1006,14 +1056,21 @@ class LocalCsvInput extends CsvInputBase {
 		return "$scriptname-master.csv";
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime,$delimiter){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
-		
+	private function do_input($filename,$delimiter){
 		$handle = @fopen($filename,"r");
 		if($handle === FALSE) return "CSV: Failed to open '$filename'";
 		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);		
+		return $result;
+	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$delimiter){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($filename,$delimiter);
+		if(is_string($result)) $this->cache_error($scriptname,$result);
 		return $result;
 	}
 
@@ -1021,32 +1078,39 @@ class LocalCsvInput extends CsvInputBase {
 
 class RemoteCsvInput extends CsvInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "csv-remote") return FALSE;
 		if(!isset($config["url"])) return "CSV: missing config parameter: 'url'";
 		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],$delimiter);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".csv") return FALSE;
 		$result = write_config($scriptname,array("format"=>"csv-remote","url"=>$config["url"], "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"],",");
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url,$delimiter){
-		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
-		
+	private function do_input($url,$delimiter){
 		$handle = http_request($url);
 		if(is_string($handle)) return "CSV: $handle";
 		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);
+		return $result;
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url,$delimiter){
+		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($url,$delimiter);
+		if(is_string($result)) $this->cache_error($scriptname,$result);		
 		return $result;
 	}
 
@@ -1135,20 +1199,20 @@ abstract class JsonInputBase extends InputFormat {
 
 class LocalJsonInput extends JsonInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "json-local") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!$this->is_available()) return FALSE;
 		if(!file_exists($this->get_filename($scriptname))) return FALSE;
 		$result = write_config($scriptname,array("format"=>"json-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1157,45 +1221,59 @@ class LocalJsonInput extends JsonInputBase {
 		return "$scriptname-master.json";
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$expiretime){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$expiretime)) return FALSE;
-		
+	private function do_input($filename){
 		$handle = @fopen($filename,"r");
 		if($handle===FALSE) return "JSON: Failed to open '$filename'";
 		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
 		return $result;
 	}
+	
+	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok){
+		$filename = $this->get_filename($scriptname);
+		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($filename);
+		if(is_string($result)) $this->cache_error($scriptname,$result);		
+		return $result;
+	}
 }
 
 class RemoteJsonInput extends JsonInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "json-remote") return FALSE;
 		if(!isset($config["url"])) return "JSON: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config){
+	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".json") return FALSE;
 		$result = write_config($scriptname,array("format"=>"json-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$expiretime,$config["url"]);
+		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$expiretime,$url){
-		if(!$this->url_read_due($cachedtime,$expiretime)) return FALSE;
-
+	private function do_input($url){
 		$handle = http_request($url);
 		if(is_string($handle)) return "JSON: $handle";
 		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
+		return $result;
+	}
+	
+	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url){
+		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptname);
+		if($error) return $error;
+		$result = $this->do_input($url);
+		if(is_string($result)) $this->cache_error($scriptname,$result);
 		return $result;
 	}
 }
@@ -4591,7 +4669,7 @@ function debug_dump($var){
 	foreach(explode("\n",var_export($var,TRUE)) as $line) error_log($line);
 }
 
-function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiretime){
+function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldestinputok){
 	$filename = get_config_filename($scriptname);
 	if(file_exists($filename)){
 		$config = include $filename;
@@ -4601,7 +4679,7 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiret
 	if(isset($config["format"])){	
 		$formatname = $config["format"];
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$expiretime,$config);
+			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config);
 			if(is_string($result)) return $result; # error
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -4609,7 +4687,7 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiret
 		return "Failed to read input for format '$formatname'";
 	}else{
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$expiretime,$config);
+			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config);
 			if(is_string($result)) return $result; # error;
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -4627,11 +4705,11 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats,$input
 	}else{
 		$cachedtime = 0;
 	}
-	// cache is out of date if not created today
-	$cal = new Calendar(time());
+	// cached input is out of date if not created today
+	$cal = new Calendar(time());	
 	$cal->set_time(0,0,0);
-	$expiretime = $cal->time;	
-	$data = read_input_if_necessary($scriptname,$input_formats,$cachedtime,$expiretime);	
+	$oldestinputok = $cal->time;	
+	$data = read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldestinputok);	
 	if(is_string($data)) return $data; // error
 	if($data===FALSE) return;          // not modified
 	
