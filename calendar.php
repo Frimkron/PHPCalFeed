@@ -1,10 +1,11 @@
 <?php
 
+// TODO: easy-subscribe widgit
+//		have button html omit outputs that aren't available
 // TODO: badly-formatted config kills script
 //		Can errors be caught for imports?
 // TODO: test output in different timezone
 
-// TODO: easy-subscribe widgit
 // TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
 // TODO: CalDAV
@@ -25,6 +26,7 @@
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
 // TODO: need better way to handle incrementing from start time
+// TODO: internationalisation
 
 
 abstract class InputFormat {
@@ -1316,7 +1318,89 @@ abstract class HtmlOutputBase extends OutputFormat {
 
 	const SHOW_MONTHS = 3;
 
-	protected function make_html_fragment($doc,$data){
+	protected function is_available(){
+		return extension_loaded("libxml") && extension_loaded("dom");
+	}
+
+	protected function make_button_fragment($doc){
+	
+		$scripturl_np = "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"];
+	
+		$elbutton = $doc->createElement("div");
+		$elbutton->setAttribute("class","calsub-button");
+		
+			$ellink = $doc->createElement("a");
+			$ellink->setAttribute("class","calsub-link");
+			$ellink->setAttribute("title","Subscribe to calendar");
+			$ellink->setAttribute("href","$scripturl_np?format=icalendar");			
+			$elbutton->appendChild($ellink);
+			
+			$elmenu = $doc->createElement("div");
+			$elmenu->setAttribute("class","calsub-menu");
+			
+				// TODO dont add links if output not available
+			
+				$elitemical = $doc->createElement("a");
+				$txitemical = $doc->createTextNode("Subscribe to iCalendar");
+				$elitemical->appendChild($txitemical);
+				$elitemical->setAttribute("class","calsub-item");
+				$elitemical->setAttribute("href","webcal:$scripturl_np?format=icalendar");
+				$elmenu->appendChild($elitemical);
+			
+				$elitemgoogle = $doc->createElement("a");
+				$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
+				$elitemgoogle->appendChild($txitemgoogle);
+				$elitemgoogle->setAttribute("class","calsub-item");
+				$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid="
+						.urlencode("http:".$scripturl_np."?format=icalendar"));
+				$elmenu->appendChild($elitemgoogle);
+				
+				$elitemlive = $doc->createElement("a");
+				$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
+				$elitemlive->appendChild($txitemlive);
+				$elitemlive->setAttribute("class","calsub-item");
+				$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
+						."?rru=addsubscription&url=".urlencode("http:".$scripturl_np."?format=icalendar")
+						."&name=".urlencode("Calendar"));
+				$elmenu->appendChild($elitemlive);
+				
+				$elitemrss = $doc->createElement("a");
+				$txitemrss = $doc->createTextNode("Subscribe to RSS");
+				$elitemrss->appendChild($txitemrss);
+				$elitemrss->setAttribute("class","calsub-item");
+				$elitemrss->setAttribute("href","http:".$scripturl_np."?format=rss");
+				$elmenu->appendChild($elitemrss);
+				
+				$elitemjson = $doc->createElement("a");
+				$txitemjson = $doc->createTextNode("Link to JSON data");
+				$elitemjson->appendChild($txitemjson);
+				$elitemjson->setAttribute("class","calsub-item");
+				$elitemjson->setAttribute("href","http:".$scripturl_np."?format=json");
+				$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+				$elmenu->appendChild($elitemjson);
+				
+				$elitemxml = $doc->createElement("a");
+				$txitemxml = $doc->createTextNode("Link to XML data");
+				$elitemxml->appendChild($txitemxml);
+				$elitemxml->setAttribute("class","calsub-item");
+				$elitemxml->setAttribute("href","http:".$scripturl_np."?format=xml");
+				$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+				$elmenu->appendChild($elitemxml);
+				
+				$elitemsexp = $doc->createElement("a");
+				$txitemsexp = $doc->createTextNode("Link to S-Exp data");
+				$elitemsexp->appendChild($txitemsexp);
+				$elitemsexp->setAttribute("class","calsub-item");
+				$elitemsexp->setAttribute("href","http:".$scripturl_np."?format=s-exp");
+				$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+				$elmenu->appendChild($elitemsexp);
+				
+			$elbutton->appendChild($elmenu);
+		
+		return $elbutton;	
+	}
+
+	protected function make_calendar_fragment($doc,$data){
 	
 		$time = time();
 		$cal = new Calendar($time);
@@ -1342,6 +1426,9 @@ abstract class HtmlOutputBase extends OutputFormat {
 					}
 				$elcontainer->appendChild($eltitle);
 			}
+	
+			$elsubbutton = $this->make_button_fragment($doc);
+			$elcontainer->appendChild($elsubbutton);
 	
 			if(isset($data->description)){
 				$eldescription = $doc->createElement("p");
@@ -1568,11 +1655,13 @@ class HtmlFullOutput extends HtmlOutputBase {
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
 		if($name!="html") return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
 	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/html"))) return FALSE;
+		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 
@@ -1581,6 +1670,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 	}
 
 	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
 	
 		$dom = new DOMImplementation();
 	
@@ -1602,11 +1692,17 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$eldesc->setAttribute("content",$data->description);
 					$elhead->appendChild($eldesc);
 				}
-	
+				
+				$elcssbutt = $doc->createElement("link");
+				$elcssbutt->setAttribute("rel","stylesheet");
+				$elcssbutt->setAttribute("type","text/css");
+				$elcssbutt->setAttribute("href","$scriptname-sub.css");
+				$elhead->appendChild($elcssbutt);
+				
 				$elcss = $doc->createElement("link");
 				$elcss->setAttribute("rel","stylesheet");
 				$elcss->setAttribute("type","text/css");
-				$elcss->setAttribute("href",$scriptname.".css");
+				$elcss->setAttribute("href","$scriptname-cal.css");
 				$elhead->appendChild($elcss);
 				
 				$elhcal = $doc->createElement("link");
@@ -1624,7 +1720,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 			$elbody = $doc->createElement("body");
 			$elbody->setAttribute("style","background-color: rgb(100,200,200);");
 	
-				$elfrag = $this->make_html_fragment($doc,$data);
+				$elfrag = $this->make_calendar_fragment($doc,$data);
 				$elbody->appendChild($elfrag);
 	
 			$elhtml->appendChild($elbody);
@@ -1649,6 +1745,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 class HtmlFragOutput extends HtmlOutputBase {
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+		if(!$this->is_available()) return FALSE;
 		$result = $this->handle($scriptname,$output_formats,$input_formats);
 		// echo rather than return, to avoid 500 response from include
 		if($result) echo $result;
@@ -1668,9 +1765,10 @@ class HtmlFragOutput extends HtmlOutputBase {
 	}
 	
 	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
 	
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_html_fragment($doc,$data) );
+		$doc->appendChild( $this->make_calendar_fragment($doc,$data) );
 		$doc->formatOutput = TRUE;
  		$doc->saveHTMLFile($this->get_filename($scriptname)); 
 	}
@@ -1680,6 +1778,57 @@ class HtmlFragOutput extends HtmlOutputBase {
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;
 		}
+	}
+}
+
+class HtmlButtonOutput extends HtmlOutputBase {
+
+	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+		return FALSE;
+	}
+	
+	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+		if($name!="html-button") return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+	}
+	
+	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+		return FALSE;
+	}
+	
+	protected function get_filename($scriptname){
+		return "$scriptname-button.html";
+	}
+	
+	public function write_file_if_possible($scriptname,$data){
+		if(!$this->is_available()) return;
+		$filename = $this->get_filename($scriptname);
+		// output type is special - don't need to keep it up to date
+		if(file_exists($filename)) return; 
+		
+		$doc = new DOMDocument();
+		$doc->appendChild( $this->make_button_fragment($doc) );
+		$doc->formatOutput = TRUE;
+ 		$doc->saveHTMLFile($filename); 
+	}
+	
+	protected function output($scriptname,$params){
+		$filename = $this->get_filename($scriptname);
+		if( @readfile($filename) === FALSE ){
+			return "Error reading ".$filename;
+		}		
+	}
+
+	protected function handle($scriptname,$output_formats,$input_formats,$params){
+		$filename = $this->get_filename($scriptname);
+		// output type is special - its never out of date and needn't trigger generation of 
+		// other outputs, only itself
+		if(!file_exists($filename)){
+			$this->write_file_if_possible($scriptname,NULL);
+		}
+		$error = $this->output($scriptname,$params);
+		if($error) return $error;
 	}
 }
 
@@ -4776,6 +4925,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 $output_formats = array(
 	new HtmlFullOutput(),
 	new HtmlFragOutput(),
+	new HtmlButtonOutput(),
 	new JsonOutput(),
 	new JsonpOutput(),
 	new ICalendarOutput(),

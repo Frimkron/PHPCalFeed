@@ -42,6 +42,8 @@
 .cal-hcal-link { font-size: 60%; display: block; width: 14em; margin: 1em 1em 0 auto; text-align: right; 
 				color: rgb(64,64,64); text-decoration: none; clear: both; padding: 1em 0 0 0; }
 .cal-event abbr { text-decoration: none; border: none; }
+.calsub-button { width: 5em; height: 5em; }
+
 
 @media screen and (max-width: 600px) {
 	
