@@ -1343,14 +1343,14 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elitemical = $doc->createElement("a");
 				$txitemical = $doc->createTextNode("Subscribe to iCalendar");
 				$elitemical->appendChild($txitemical);
-				$elitemical->setAttribute("class","calsub-item");
+				$elitemical->setAttribute("class","calsub-item calsub-icalendar");
 				$elitemical->setAttribute("href","webcal:$scripturl_np?format=icalendar");
 				$elmenu->appendChild($elitemical);
 			
 				$elitemgoogle = $doc->createElement("a");
 				$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
 				$elitemgoogle->appendChild($txitemgoogle);
-				$elitemgoogle->setAttribute("class","calsub-item");
+				$elitemgoogle->setAttribute("class","calsub-item calsub-google");
 				$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid="
 						.urlencode("http:".$scripturl_np."?format=icalendar"));
 				$elmenu->appendChild($elitemgoogle);
@@ -1358,7 +1358,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elitemlive = $doc->createElement("a");
 				$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
 				$elitemlive->appendChild($txitemlive);
-				$elitemlive->setAttribute("class","calsub-item");
+				$elitemlive->setAttribute("class","calsub-item calsub-live");
 				$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
 						."?rru=addsubscription&url=".urlencode("http:".$scripturl_np."?format=icalendar")
 						."&name=".urlencode("Calendar"));
@@ -1367,14 +1367,14 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elitemrss = $doc->createElement("a");
 				$txitemrss = $doc->createTextNode("Subscribe to RSS");
 				$elitemrss->appendChild($txitemrss);
-				$elitemrss->setAttribute("class","calsub-item");
+				$elitemrss->setAttribute("class","calsub-item calsub-rss");
 				$elitemrss->setAttribute("href","http:".$scripturl_np."?format=rss");
 				$elmenu->appendChild($elitemrss);
 				
 				$elitemjson = $doc->createElement("a");
 				$txitemjson = $doc->createTextNode("Link to JSON data");
 				$elitemjson->appendChild($txitemjson);
-				$elitemjson->setAttribute("class","calsub-item");
+				$elitemjson->setAttribute("class","calsub-item calsub-json");
 				$elitemjson->setAttribute("href","http:".$scripturl_np."?format=json");
 				$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
 				$elmenu->appendChild($elitemjson);
@@ -1382,7 +1382,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elitemxml = $doc->createElement("a");
 				$txitemxml = $doc->createTextNode("Link to XML data");
 				$elitemxml->appendChild($txitemxml);
-				$elitemxml->setAttribute("class","calsub-item");
+				$elitemxml->setAttribute("class","calsub-item calsub-xml");
 				$elitemxml->setAttribute("href","http:".$scripturl_np."?format=xml");
 				$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
 				$elmenu->appendChild($elitemxml);
@@ -1390,7 +1390,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elitemsexp = $doc->createElement("a");
 				$txitemsexp = $doc->createTextNode("Link to S-Exp data");
 				$elitemsexp->appendChild($txitemsexp);
-				$elitemsexp->setAttribute("class","calsub-item");
+				$elitemsexp->setAttribute("class","calsub-item calsub-sexp");
 				$elitemsexp->setAttribute("href","http:".$scripturl_np."?format=s-exp");
 				$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
 				$elmenu->appendChild($elitemsexp);
