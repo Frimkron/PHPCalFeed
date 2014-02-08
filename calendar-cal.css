@@ -39,10 +39,12 @@
 				width: 33%; padding: 0.25em 0em; z-index: 8; margin-top: 1em; float: left; height: 1.5em; 
 				margin-bottom: -2.25em; position: relative; }
 .col-nav-link:hover { color: rgb(0,200,200); }
+#cal-0-link { clear: both; }
 .cal-hcal-link { font-size: 60%; display: block; width: 14em; margin: 1em 1em 0 auto; text-align: right; 
 				color: rgb(64,64,64); text-decoration: none; clear: both; padding: 1em 0 0 0; }
 .cal-event abbr { text-decoration: none; border: none; }
-.calsub-button { width: 5em; height: 5em; }
+.calsub-button { width: 5em; height: 5em; float: right; margin-left: 1em; }
+.calsub-menu { left: auto; right: 50%; }
 
 
 @media screen and (max-width: 600px) {

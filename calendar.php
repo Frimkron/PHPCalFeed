@@ -1,15 +1,15 @@
 <?php
 
-// TODO: easy-subscribe widgit
-//		have button html omit outputs that aren't available
-// TODO: badly-formatted config kills script
-//		Can errors be caught for imports?
-// TODO: test output in different timezone
+// TODO: check that subscribe button and rss feeds still work when script is included in another php file
+// TODO: comments to surrond sub button html
+// TODO: existing calendar xml standard?
+// TODO link alternate suitable for other formats?
 
 // TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
-// TODO: CalDAV
 // TODO: sql database input using pdo
+// TODO: icalendar proper timezone construction
+// TODO: CalDAV
 // TODO: facebook input
 // TODO: wordpress api
 // TODO: eventbrite input
@@ -21,8 +21,6 @@
 // TODO: textpattern api
 // TODO: web-based UI for config
 // TODO: web-based UI input
-// TODO: icalendar proper timezone construction
-// TODO: icalendar disallows zero events
 // TODO: microformat shouldn't have multiple events for day-spanning event
 // TODO: browser cache headers
 // TODO: need better way to handle incrementing from start time
@@ -54,7 +52,7 @@ abstract class InputFormat {
 	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config);
 	
 	protected function file_read_due($filename,$cachedtime,$oldestinputok){
-		return $cachedtime <= filemtime($filename) || $cachedtime <= $oldestinputok;
+		return $cachedtime <= @filemtime($filename) || $cachedtime <= $oldestinputok;
 	}
 	
 	protected function url_read_due($cachedtime,$oldestinputok){
@@ -67,8 +65,7 @@ abstract class InputFormat {
 	
 	protected function check_cached_error($scriptname){
 		$errorfile = $this->get_error_filename($scriptname);
-		$errortime = filemtime($errorfile);
-		error_log("error file time");
+		$errortime = @filemtime($errorfile);
 		if($errortime===FALSE) return;
 		if(time() - $errortime > 20*60){ // error file is valid for 20 minutes
 			unlink($errorfile);
@@ -1292,13 +1289,15 @@ abstract class OutputFormat {
 			description
 			url					*/
 
-	public abstract function write_file_if_possible($scriptname,$data);
+	public abstract function write_file_if_possible($scriptname,$data,$output_formats);
 
 	public abstract function attempt_handle_include($scriptname,$output_formats,$input_formats,$params);
 
 	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params);
 	
 	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params);
+
+	public abstract function attempt_protocolless_url_by_name($name,$scriptname);
 
 	protected abstract function get_filename($scriptname);
 	
@@ -1322,9 +1321,20 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	protected function make_button_fragment($doc){
+	protected function url_for_format($name,$scriptname,$output_formats){
+		foreach($output_formats as $format){
+			$url = $format->attempt_protocolless_url_by_name($name,$scriptname);
+			if($url !== FALSE) return $url;
+		}
+		return FALSE;
+	}
+
+	protected function make_button_fragment($doc,$scriptname,$output_formats){
 	
-		$scripturl_np = "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"];
+		$urlical = $this->url_for_format("icalendar",$scriptname,$output_formats);
+	
+		// TODO
+		//$comstart = $doc->createComment("=================== Calendar button start =====================");
 	
 		$elbutton = $doc->createElement("div");
 		$elbutton->setAttribute("class","calsub-button");
@@ -1332,75 +1342,88 @@ abstract class HtmlOutputBase extends OutputFormat {
 			$ellink = $doc->createElement("a");
 			$ellink->setAttribute("class","calsub-link");
 			$ellink->setAttribute("title","Subscribe to calendar");
-			$ellink->setAttribute("href","$scripturl_np?format=icalendar");			
+			if($urlical!==FALSE) $ellink->setAttribute("href",$urlical);
 			$elbutton->appendChild($ellink);
 			
 			$elmenu = $doc->createElement("div");
 			$elmenu->setAttribute("class","calsub-menu");
 			
-				// TODO dont add links if output not available
+				if($urlical!==FALSE){
+					$elitemical = $doc->createElement("a");
+					$txitemical = $doc->createTextNode("Subscribe to iCalendar");
+					$elitemical->appendChild($txitemical);
+					$elitemical->setAttribute("class","calsub-item calsub-icalendar");
+					$elitemical->setAttribute("href","webcal:$urlical");
+					$elmenu->appendChild($elitemical);
+					
+					$elitemgoogle = $doc->createElement("a");
+					$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
+					$elitemgoogle->appendChild($txitemgoogle);
+					$elitemgoogle->setAttribute("class","calsub-item calsub-google");
+					$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid=".urlencode("http:$urlical"));
+					$elmenu->appendChild($elitemgoogle);
+					
+					$elitemlive = $doc->createElement("a");
+					$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
+					$elitemlive->appendChild($txitemlive);
+					$elitemlive->setAttribute("class","calsub-item calsub-live");
+					$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
+							."?rru=addsubscription&url=".urlencode("http:$urlical")."&name=".urlencode("Calendar"));
+					$elmenu->appendChild($elitemlive);
+				}
 			
-				$elitemical = $doc->createElement("a");
-				$txitemical = $doc->createTextNode("Subscribe to iCalendar");
-				$elitemical->appendChild($txitemical);
-				$elitemical->setAttribute("class","calsub-item calsub-icalendar");
-				$elitemical->setAttribute("href","webcal:$scripturl_np?format=icalendar");
-				$elmenu->appendChild($elitemical);
-			
-				$elitemgoogle = $doc->createElement("a");
-				$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
-				$elitemgoogle->appendChild($txitemgoogle);
-				$elitemgoogle->setAttribute("class","calsub-item calsub-google");
-				$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid="
-						.urlencode("http:".$scripturl_np."?format=icalendar"));
-				$elmenu->appendChild($elitemgoogle);
+				$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
+				if($urlrss!==FALSE){			
+					$elitemrss = $doc->createElement("a");
+					$txitemrss = $doc->createTextNode("Subscribe to RSS");
+					$elitemrss->appendChild($txitemrss);
+					$elitemrss->setAttribute("class","calsub-item calsub-rss");
+					$elitemrss->setAttribute("href","http:$urlrss");
+					$elmenu->appendChild($elitemrss);
+				}
 				
-				$elitemlive = $doc->createElement("a");
-				$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
-				$elitemlive->appendChild($txitemlive);
-				$elitemlive->setAttribute("class","calsub-item calsub-live");
-				$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
-						."?rru=addsubscription&url=".urlencode("http:".$scripturl_np."?format=icalendar")
-						."&name=".urlencode("Calendar"));
-				$elmenu->appendChild($elitemlive);
+				$urljson = $this->url_for_format("json", $scriptname,$output_formats);
+				if($urljson!==FALSE){
+					$elitemjson = $doc->createElement("a");
+					$txitemjson = $doc->createTextNode("Link to JSON data");
+					$elitemjson->appendChild($txitemjson);
+					$elitemjson->setAttribute("class","calsub-item calsub-json");
+					$elitemjson->setAttribute("href","http:$urljson");
+					$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+					$elmenu->appendChild($elitemjson);
+				}
 				
-				$elitemrss = $doc->createElement("a");
-				$txitemrss = $doc->createTextNode("Subscribe to RSS");
-				$elitemrss->appendChild($txitemrss);
-				$elitemrss->setAttribute("class","calsub-item calsub-rss");
-				$elitemrss->setAttribute("href","http:".$scripturl_np."?format=rss");
-				$elmenu->appendChild($elitemrss);
+				$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
+				if($urlxml!==FALSE){				
+					$elitemxml = $doc->createElement("a");
+					$txitemxml = $doc->createTextNode("Link to XML data");
+					$elitemxml->appendChild($txitemxml);
+					$elitemxml->setAttribute("class","calsub-item calsub-xml");
+					$elitemxml->setAttribute("href","http:$urlxml");
+					$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+					$elmenu->appendChild($elitemxml);
+				}
 				
-				$elitemjson = $doc->createElement("a");
-				$txitemjson = $doc->createTextNode("Link to JSON data");
-				$elitemjson->appendChild($txitemjson);
-				$elitemjson->setAttribute("class","calsub-item calsub-json");
-				$elitemjson->setAttribute("href","http:".$scripturl_np."?format=json");
-				$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-				$elmenu->appendChild($elitemjson);
-				
-				$elitemxml = $doc->createElement("a");
-				$txitemxml = $doc->createTextNode("Link to XML data");
-				$elitemxml->appendChild($txitemxml);
-				$elitemxml->setAttribute("class","calsub-item calsub-xml");
-				$elitemxml->setAttribute("href","http:".$scripturl_np."?format=xml");
-				$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-				$elmenu->appendChild($elitemxml);
-				
-				$elitemsexp = $doc->createElement("a");
-				$txitemsexp = $doc->createTextNode("Link to S-Exp data");
-				$elitemsexp->appendChild($txitemsexp);
-				$elitemsexp->setAttribute("class","calsub-item calsub-sexp");
-				$elitemsexp->setAttribute("href","http:".$scripturl_np."?format=s-exp");
-				$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-				$elmenu->appendChild($elitemsexp);
+				$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
+				if($urlsexp!==FALSE){
+					$elitemsexp = $doc->createElement("a");
+					$txitemsexp = $doc->createTextNode("Link to S-Exp data");
+					$elitemsexp->appendChild($txitemsexp);
+					$elitemsexp->setAttribute("class","calsub-item calsub-sexp");
+					$elitemsexp->setAttribute("href","http:$urlsexp");
+					$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+					$elmenu->appendChild($elitemsexp);
+				}
 				
 			$elbutton->appendChild($elmenu);
+			
+		// TODO
+		//$comend = $doc->createComment("=================== Calendar button end =====================");
 		
 		return $elbutton;	
 	}
 
-	protected function make_calendar_fragment($doc,$data){
+	protected function make_calendar_fragment($doc,$scriptname,$data,$output_formats){
 	
 		$time = time();
 		$cal = new Calendar($time);
@@ -1427,7 +1450,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcontainer->appendChild($eltitle);
 			}
 	
-			$elsubbutton = $this->make_button_fragment($doc);
+			$elsubbutton = $this->make_button_fragment($doc,$scriptname,$output_formats);
 			$elcontainer->appendChild($elsubbutton);
 	
 			if(isset($data->description)){
@@ -1649,12 +1672,14 @@ abstract class HtmlOutputBase extends OutputFormat {
 
 class HtmlFullOutput extends HtmlOutputBase {
 
+	const FORMAT_NAME = "html";
+
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="html") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -1669,7 +1694,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 		return "$name.html";
 	}
 
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 	
 		$dom = new DOMImplementation();
@@ -1715,12 +1740,22 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elvport->setAttribute("content","width=device-width");
 				$elhead->appendChild($elvport);
 	
+				$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
+				if($urlrss!==FALSE){
+					$elrss = $doc->createElement("link");
+					$elrss->setAttribute("rel","alternate");
+					$elrss->setAttribute("type","application/rss+xml");
+					$elrss->setAttribute("href","http:$urlrss");
+					$elrss->setAttribute("title","Calendar RSS feed");
+					$elhead->appendChild($elrss);
+				}
+	
 			$elhtml->appendChild($elhead);
 	
 			$elbody = $doc->createElement("body");
 			$elbody->setAttribute("style","background-color: rgb(100,200,200);");
 	
-				$elfrag = $this->make_calendar_fragment($doc,$data);
+				$elfrag = $this->make_calendar_fragment($doc,$scriptname,$data,$output_formats);
 				$elbody->appendChild($elfrag);
 	
 			$elhtml->appendChild($elbody);
@@ -1740,9 +1775,17 @@ class HtmlFullOutput extends HtmlOutputBase {
 			return "Error reading ".$filename;
 		}
 	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class HtmlFragOutput extends HtmlOutputBase {
+
+	const FORMAT_NAME = "html-frag";
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		if(!$this->is_available()) return FALSE;
@@ -1752,7 +1795,7 @@ class HtmlFragOutput extends HtmlOutputBase {
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="html-frag") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
@@ -1764,11 +1807,11 @@ class HtmlFragOutput extends HtmlOutputBase {
 		return "$scriptname-frag.html";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 	
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_calendar_fragment($doc,$data) );
+		$doc->appendChild( $this->make_calendar_fragment($doc,$scriptname,$data,$output_formats) );
 		$doc->formatOutput = TRUE;
  		$doc->saveHTMLFile($this->get_filename($scriptname)); 
 	}
@@ -1779,16 +1822,24 @@ class HtmlFragOutput extends HtmlOutputBase {
 			return "Error reading ".$filename;
 		}
 	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if(!$this->is_available()) return FALSE;
+		if($name != self::FORMAT_NAME) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class HtmlButtonOutput extends HtmlOutputBase {
+
+	const FORMAT_NAME = "html-button";
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="html-button") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -1800,15 +1851,15 @@ class HtmlButtonOutput extends HtmlOutputBase {
 	protected function get_filename($scriptname){
 		return "$scriptname-button.html";
 	}
-	
-	public function write_file_if_possible($scriptname,$data){
+
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		$filename = $this->get_filename($scriptname);
 		// output type is special - don't need to keep it up to date
 		if(file_exists($filename)) return; 
 		
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_button_fragment($doc) );
+		$doc->appendChild( $this->make_button_fragment($doc,$scriptname,$output_formats) );
 		$doc->formatOutput = TRUE;
  		$doc->saveHTMLFile($filename); 
 	}
@@ -1825,10 +1876,16 @@ class HtmlButtonOutput extends HtmlOutputBase {
 		// output type is special - its never out of date and needn't trigger generation of 
 		// other outputs, only itself
 		if(!file_exists($filename)){
-			$this->write_file_if_possible($scriptname,NULL);
+			$this->write_file_if_possible($scriptname,NULL,$output_formats);
 		}
 		$error = $this->output($scriptname,$params);
 		if($error) return $error;
+	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if(!$this->is_available()) return FALSE;
+		if($name != self::FORMAT_NAME) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -1851,12 +1908,14 @@ abstract class JsonOutputBase extends OutputFormat {
 
 class JsonOutput extends JsonOutputBase {
 
+	const FORMAT_NAME = "json";
+
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="json") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -1871,7 +1930,7 @@ class JsonOutput extends JsonOutputBase {
 		return $scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
 		$filename = $this->get_filename($scriptname);
@@ -1890,16 +1949,24 @@ class JsonOutput extends JsonOutputBase {
 			return "Error reading ".$filename;
 		}
 	}	
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
-class JsonpOutput extends JsonOutputBase {
+class JsonPOutput extends JsonOutputBase {
+
+	const FORMAT_NAME = "jsonp";
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="jsonp") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -1914,7 +1981,7 @@ class JsonpOutput extends JsonOutputBase {
 		return $scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
 		$filename = $this->get_filename($scriptname);
@@ -1940,16 +2007,24 @@ class JsonpOutput extends JsonOutputBase {
 		}
 		echo ");";
 	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class SExpressionOutput extends OutputFormat {
+
+	const FORMAT_NAME = "s-exp";
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;	
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="s-exp") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
@@ -1969,7 +2044,7 @@ class SExpressionOutput extends OutputFormat {
 			str_replace("\\","\\\\",$text));
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		$filename = $this->get_filename($scriptname);
 		$handle = @fopen($filename,"w");
 		if($handle === FALSE){
@@ -2010,16 +2085,23 @@ class SExpressionOutput extends OutputFormat {
 			return "Error reading $filename";
 		}
 	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class ICalendarOutput extends OutputFormat {
+
+	const FORMAT_NAME = "icalendar";
 
 	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="icalendar") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
 	
@@ -2050,7 +2132,7 @@ class ICalendarOutput extends OutputFormat {
 			$text);
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		$filename = $this->get_filename($scriptname);
 		$handle = @fopen($filename,"w");
 		if($handle === FALSE){
@@ -2094,9 +2176,16 @@ class ICalendarOutput extends OutputFormat {
 			return "Error reading ".$filename;
 		}
 	}	
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class RssOutput extends OutputFormat {
+
+	const FORMAT_NAME = "rss";
 
 	private function is_available(){
 		return extension_loaded("libxml") && extension_loaded("dom");
@@ -2107,7 +2196,7 @@ class RssOutput extends OutputFormat {
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="rss") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -2119,10 +2208,10 @@ class RssOutput extends OutputFormat {
 	}
 
 	protected function get_filename($scriptname){
-		return $scriptname.".rss";
+		return "$scriptname.rss";
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
 		$doc = new DOMDocument();
@@ -2199,9 +2288,17 @@ class RssOutput extends OutputFormat {
 			return "Error reading ".$filename;
 		}
 	}	
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+	}
 }
 
 class XmlOutput extends OutputFormat {
+
+	const FORMAT_NAME = "xml";
 
 	private function is_available(){
 		return extension_loaded("libxml") && extension_loaded("dom");
@@ -2212,7 +2309,7 @@ class XmlOutput extends OutputFormat {
 	}
 	
 	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
-		if($name!="xml") return FALSE;
+		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return $this->handle($scriptname,$output_formats,$input_formats,$params);
 	}
@@ -2224,14 +2321,15 @@ class XmlOutput extends OutputFormat {
 	}
 
 	protected function get_filename($scriptname){
-		return $scriptname.".xml";
+		return "$scriptname.xml";
 	}
 	
-	public function write_file_if_possible($scriptname,$data){
+	public function write_file_if_possible($scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
-		
+		$schemaurl = "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".$scriptname.".xsd";
+
 		$dom = new DOMImplementation();
 		
 		$doc = $dom->createDocument();
@@ -2239,7 +2337,7 @@ class XmlOutput extends OutputFormat {
 			
 			$elcalendar = $doc->createElement("calendar");
 			$elcalendar->setAttributeNS("http://www.w3.org/2001/XMLSchema-instance",
-					"xsi:schemaLocation", $namespace." calendar.xsd");
+					"xsi:schemaLocation", "$namespace $schemaurl");
 				
 				if(isset($data->name)){
 					$elname = $doc->createElement("name");
@@ -2312,6 +2410,12 @@ class XmlOutput extends OutputFormat {
 		if( @readfile($filename) === FALSE ){
 			return "Error reading ".$filename;	
 		}
+	}
+	
+	public function attempt_protocolless_url_by_name($name,$scriptname){
+		if($name != self::FORMAT_NAME) return FALSE;
+		if(!$this->is_available()) return FALSE;
+		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
 	}	
 }
 
@@ -4847,7 +4951,7 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldesti
 
 function update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats){
 	if(file_exists($filename)){
-		$cachedtime = filemtime($filename);
+		$cachedtime = @filemtime($filename);
 		if($cachedtime === FALSE){
 			return "Failed to determine last modified time for ".$filename;
 		}
@@ -4865,7 +4969,7 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats,$input
 	$data->events = generate_events($data);
 	unset($data->{"recurring-events"});
 	foreach($output_formats as $format){
-		$error = $format->write_file_if_possible($scriptname,$data);
+		$error = $format->write_file_if_possible($scriptname,$data,$output_formats);
 		if($error) return $error;
 	}
 }
@@ -4927,7 +5031,7 @@ $output_formats = array(
 	new HtmlFragOutput(),
 	new HtmlButtonOutput(),
 	new JsonOutput(),
-	new JsonpOutput(),
+	new JsonPOutput(),
 	new ICalendarOutput(),
 	new RssOutput(),
 	new XmlOutput(),
