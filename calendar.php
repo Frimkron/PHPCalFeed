@@ -1,9 +1,8 @@
 <?php
 
+// TODO: all relative paths are broken for include
 // TODO: check that subscribe button and rss feeds still work when script is included in another php file
-// TODO: comments to surrond sub button html
-// TODO: existing calendar xml standard?
-// TODO link alternate suitable for other formats?
+// TODO xCal?
 
 // TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
@@ -1333,94 +1332,143 @@ abstract class HtmlOutputBase extends OutputFormat {
 	
 		$urlical = $this->url_for_format("icalendar",$scriptname,$output_formats);
 	
-		// TODO
-		//$comstart = $doc->createComment("=================== Calendar button start =====================");
+		$fragment = $doc->createDocumentFragment();
 	
-		$elbutton = $doc->createElement("div");
-		$elbutton->setAttribute("class","calsub-button");
-		
-			$ellink = $doc->createElement("a");
-			$ellink->setAttribute("class","calsub-link");
-			$ellink->setAttribute("title","Subscribe to calendar");
-			if($urlical!==FALSE) $ellink->setAttribute("href",$urlical);
-			$elbutton->appendChild($ellink);
+			$white = $doc->createTextNode("\n");
+			$fragment->appendChild($white);
+	
+			$comstart = $doc->createComment("========= Calendar button start =========");
+			$fragment->appendChild($comstart);
+	
+			$white = $doc->createTextNode("\n");
+			$fragment->appendChild($white);
+	
+			$elbutton = $doc->createElement("div");
+			$elbutton->setAttribute("class","calsub-button");
 			
-			$elmenu = $doc->createElement("div");
-			$elmenu->setAttribute("class","calsub-menu");
+				$white = $doc->createTextNode("\n    ");
+				$elbutton->appendChild($white);
 			
-				if($urlical!==FALSE){
-					$elitemical = $doc->createElement("a");
-					$txitemical = $doc->createTextNode("Subscribe to iCalendar");
-					$elitemical->appendChild($txitemical);
-					$elitemical->setAttribute("class","calsub-item calsub-icalendar");
-					$elitemical->setAttribute("href","webcal:$urlical");
-					$elmenu->appendChild($elitemical);
+				$ellink = $doc->createElement("a");
+				$ellink->setAttribute("class","calsub-link");
+				$ellink->setAttribute("title","Subscribe to calendar");
+				if($urlical!==FALSE) $ellink->setAttribute("href",$urlical);
+				$elbutton->appendChild($ellink);
+				
+				$white = $doc->createTextNode("\n    ");
+				$elbutton->appendChild($white);
+				
+				$elmenu = $doc->createElement("div");
+				$elmenu->setAttribute("class","calsub-menu");
+				
+					if($urlical!==FALSE){
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
 					
-					$elitemgoogle = $doc->createElement("a");
-					$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
-					$elitemgoogle->appendChild($txitemgoogle);
-					$elitemgoogle->setAttribute("class","calsub-item calsub-google");
-					$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid=".urlencode("http:$urlical"));
-					$elmenu->appendChild($elitemgoogle);
+						$elitemical = $doc->createElement("a");
+						$txitemical = $doc->createTextNode("Subscribe to iCalendar");
+						$elitemical->appendChild($txitemical);
+						$elitemical->setAttribute("class","calsub-item calsub-icalendar");
+						$elitemical->setAttribute("href","webcal:$urlical");
+						$elmenu->appendChild($elitemical);
+						
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
+						
+						$elitemgoogle = $doc->createElement("a");
+						$txitemgoogle = $doc->createTextNode("Subscribe with Google Calendar");
+						$elitemgoogle->appendChild($txitemgoogle);
+						$elitemgoogle->setAttribute("class","calsub-item calsub-google");
+						$elitemgoogle->setAttribute("href","http://www.google.com/calendar/render?cid=".urlencode("http:$urlical"));
+						$elmenu->appendChild($elitemgoogle);
+						
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
+						
+						$elitemlive = $doc->createElement("a");
+						$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
+						$elitemlive->appendChild($txitemlive);
+						$elitemlive->setAttribute("class","calsub-item calsub-live");
+						$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
+								."?rru=addsubscription&url=".urlencode("http:$urlical")."&name=".urlencode("Calendar"));
+						$elmenu->appendChild($elitemlive);
+					}
+				
+					$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
+					if($urlrss!==FALSE){			
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
 					
-					$elitemlive = $doc->createElement("a");
-					$txitemlive = $doc->createTextNode("Subscribe with Microsoft Live");
-					$elitemlive->appendChild($txitemlive);
-					$elitemlive->setAttribute("class","calsub-item calsub-live");
-					$elitemlive->setAttribute("href","http://calendar.live.com/calendar/calendar.aspx"
-							."?rru=addsubscription&url=".urlencode("http:$urlical")."&name=".urlencode("Calendar"));
-					$elmenu->appendChild($elitemlive);
-				}
+						$elitemrss = $doc->createElement("a");
+						$txitemrss = $doc->createTextNode("Subscribe to RSS");
+						$elitemrss->appendChild($txitemrss);
+						$elitemrss->setAttribute("class","calsub-item calsub-rss");
+						$elitemrss->setAttribute("href","http:$urlrss");
+						$elmenu->appendChild($elitemrss);
+					}
+					
+					$urljson = $this->url_for_format("json", $scriptname,$output_formats);
+					if($urljson!==FALSE){
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
+						
+						$elitemjson = $doc->createElement("a");
+						$txitemjson = $doc->createTextNode("Link to JSON data");
+						$elitemjson->appendChild($txitemjson);
+						$elitemjson->setAttribute("class","calsub-item calsub-json");
+						$elitemjson->setAttribute("href","http:$urljson");
+						$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+						$elmenu->appendChild($elitemjson);
+					}
+					
+					$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
+					if($urlxml!==FALSE){				
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
+						
+						$elitemxml = $doc->createElement("a");
+						$txitemxml = $doc->createTextNode("Link to XML data");
+						$elitemxml->appendChild($txitemxml);
+						$elitemxml->setAttribute("class","calsub-item calsub-xml");
+						$elitemxml->setAttribute("href","http:$urlxml");
+						$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+						$elmenu->appendChild($elitemxml);
+					}
+					
+					$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
+					if($urlsexp!==FALSE){
+						$white = $doc->createTextNode("\n        ");
+						$elmenu->appendChild($white);
+					
+						$elitemsexp = $doc->createElement("a");
+						$txitemsexp = $doc->createTextNode("Link to S-Exp data");
+						$elitemsexp->appendChild($txitemsexp);
+						$elitemsexp->setAttribute("class","calsub-item calsub-sexp");
+						$elitemsexp->setAttribute("href","http:$urlsexp");
+						$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
+						$elmenu->appendChild($elitemsexp);
+					}
+					
+					$white = $doc->createTextNode("\n    ");
+					$elmenu->appendChild($white);
+					
+				$elbutton->appendChild($elmenu);
+				
+				$white = $doc->createTextNode("\n");
+				$elbutton->appendChild($white);
+								
+			$fragment->appendChild($elbutton);
 			
-				$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
-				if($urlrss!==FALSE){			
-					$elitemrss = $doc->createElement("a");
-					$txitemrss = $doc->createTextNode("Subscribe to RSS");
-					$elitemrss->appendChild($txitemrss);
-					$elitemrss->setAttribute("class","calsub-item calsub-rss");
-					$elitemrss->setAttribute("href","http:$urlrss");
-					$elmenu->appendChild($elitemrss);
-				}
-				
-				$urljson = $this->url_for_format("json", $scriptname,$output_formats);
-				if($urljson!==FALSE){
-					$elitemjson = $doc->createElement("a");
-					$txitemjson = $doc->createTextNode("Link to JSON data");
-					$elitemjson->appendChild($txitemjson);
-					$elitemjson->setAttribute("class","calsub-item calsub-json");
-					$elitemjson->setAttribute("href","http:$urljson");
-					$elitemjson->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-					$elmenu->appendChild($elitemjson);
-				}
-				
-				$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
-				if($urlxml!==FALSE){				
-					$elitemxml = $doc->createElement("a");
-					$txitemxml = $doc->createTextNode("Link to XML data");
-					$elitemxml->appendChild($txitemxml);
-					$elitemxml->setAttribute("class","calsub-item calsub-xml");
-					$elitemxml->setAttribute("href","http:$urlxml");
-					$elitemxml->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-					$elmenu->appendChild($elitemxml);
-				}
-				
-				$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
-				if($urlsexp!==FALSE){
-					$elitemsexp = $doc->createElement("a");
-					$txitemsexp = $doc->createTextNode("Link to S-Exp data");
-					$elitemsexp->appendChild($txitemsexp);
-					$elitemsexp->setAttribute("class","calsub-item calsub-sexp");
-					$elitemsexp->setAttribute("href","http:$urlsexp");
-					$elitemsexp->setAttribute("onclick","prompt('URL to copy and paste:',this.href); return false;");
-					$elmenu->appendChild($elitemsexp);
-				}
-				
-			$elbutton->appendChild($elmenu);
+			$white = $doc->createTextNode("\n");
+			$fragment->appendChild($white);
 			
-		// TODO
-		//$comend = $doc->createComment("=================== Calendar button end =====================");
+			$comend = $doc->createComment("======== Calendar button end ========");
+			$fragment->appendChild($comend);
+			
+			$white = $doc->createTextNode("\n");
+			$fragment->appendChild($white);
 		
-		return $elbutton;	
+		return $fragment;	
 	}
 
 	protected function make_calendar_fragment($doc,$scriptname,$data,$output_formats){
@@ -1742,12 +1790,52 @@ class HtmlFullOutput extends HtmlOutputBase {
 	
 				$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
 				if($urlrss!==FALSE){
-					$elrss = $doc->createElement("link");
-					$elrss->setAttribute("rel","alternate");
-					$elrss->setAttribute("type","application/rss+xml");
-					$elrss->setAttribute("href","http:$urlrss");
-					$elrss->setAttribute("title","Calendar RSS feed");
-					$elhead->appendChild($elrss);
+					$elrsslink = $doc->createElement("link");
+					$elrsslink->setAttribute("rel","alternate");
+					$elrsslink->setAttribute("type","application/rss+xml");
+					$elrsslink->setAttribute("href","http:$urlrss");
+					$elrsslink->setAttribute("title","Calendar RSS feed");
+					$elhead->appendChild($elrsslink);
+				}
+				
+				$urlical = $this->url_for_format("icalendar", $scriptname, $output_formats);
+				if($urlical!==FALSE){
+					$elicallink = $doc->createElement("link");
+					$elicallink->setAttribute("rel","alternate");
+					$elicallink->setAttribute("type","text/calendar");
+					$elicallink->setAttribute("href","http:$urlical");
+					$elicallink->setAttribute("title", "Calendar iCalendar feed");
+					$elhead->appendChild($elicallink);
+				}
+				
+				$urljson = $this->url_for_format("json", $scriptname, $output_formats);
+				if($urljson!==FALSE){
+					$eljsonlink = $doc->createElement("link");
+					$eljsonlink->setAttribute("rel","alternate");
+					$eljsonlink->setAttribute("type","application/json");
+					$eljsonlink->setAttribute("href","http:$urljson");
+					$eljsonlink->setAttribute("title","Calendar JSON feed");
+					$elhead->appendChild($eljsonlink);
+				}
+				
+				$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
+				if($urlxml!==FALSE){
+					$elxmllink = $doc->createElement("link");
+					$elxmllink->setAttribute("rel", "alternate");
+					$elxmllink->setAttribute("type","application/xml");
+					$elxmllink->setAttribute("href","http:$urlxml");
+					$elxmllink->setAttribute("title","Calendar XML feed");
+					$elhead->appendChild($elxmllink);
+				}
+				
+				$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
+				if($urlsexp!==FALSE){
+					$elsexplink = $doc->createElement("link");
+					$elsexplink->setAttribute("rel","alternate");
+					$elsexplink->setAttribute("type","application/x-lisp");
+					$elsexplink->setAttribute("href","http:$urlsexp");
+					$elsexplink->setAttribute("title","Calendar S-Expression feed");
+					$elhead->appendChild($elsexplink);
 				}
 	
 			$elhtml->appendChild($elhead);
