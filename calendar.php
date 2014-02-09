@@ -361,7 +361,7 @@ class LocalHtmlInput extends HtmlInputBase {
 	}
 	
 	protected function get_calendar_url($filepath,$config){
-		return "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".basename($filepath);
+		return "http:".get_file_protocolless_url($filepath);
 	}
 
 	private function do_input($filepath){
@@ -1866,7 +1866,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -1913,7 +1913,7 @@ class HtmlFragOutput extends HtmlOutputBase {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -1972,7 +1972,7 @@ class HtmlButtonOutput extends HtmlOutputBase {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2040,7 +2040,7 @@ class JsonOutput extends JsonOutputBase {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2098,7 +2098,7 @@ class JsonPOutput extends JsonOutputBase {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2175,7 +2175,7 @@ class SExpressionOutput extends OutputFormat {
 	
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2266,7 +2266,7 @@ class ICalendarOutput extends OutputFormat {
 	
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2379,7 +2379,7 @@ class RssOutput extends OutputFormat {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2415,7 +2415,7 @@ class XmlOutput extends OutputFormat {
 		if(!$this->is_available()) return;
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
-		$schemaurl = "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".$scriptname.".xsd";
+		$schemaurl = "http:".get_file_protocolless_url($scriptdir."/".$scriptname.".xsd");
 
 		$dom = new DOMImplementation();
 		
@@ -2502,7 +2502,7 @@ class XmlOutput extends OutputFormat {
 	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
+		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
 	}	
 }
 
@@ -4986,6 +4986,14 @@ function http_request($url){
 	}
 }
 
+function get_file_protocolless_url($filepath){
+	// TODO
+	error_log("filepath: ".$filepath);
+	error_log("http_host: ".$_SERVER["HTTP_HOST"]);
+	error_log("document_root: ".$_SERVER["DOCUMENT_ROOT"]);
+	return "//".$_SERVER["HTTP_HOST"].str_replace($_SERVER["DOCUMENT_ROOT"],"",$filepath);
+}
+
 function get_config_filepath($scriptdir,$scriptname){
 	return $scriptdir."/".$scriptname."-config.php";
 }
@@ -5137,13 +5145,10 @@ $input_formats = array(
 	new NoInput()
 );
 
-/*$result = attempt_handle(dirname(__FILE__),basename(__FILE__,".php"),$output_formats,$input_formats);
+$result = attempt_handle(dirname(__FILE__),basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
-*/
-
-var_dump($_SERVER);
