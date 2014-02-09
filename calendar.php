@@ -1,9 +1,8 @@
 <?php
 
-// TODO: all relative paths are broken for include
-// TODO: check that subscribe button and rss feeds still work when script is included in another php file
-// TODO xCal?
+// TODO: html links back to script are broken for include mode
 
+// TODO: move heavy lifting to included file?
 // TODO: events which started in the past but are still ongoing are excluded from feeds
 // TODO: Filename in config for local files
 // TODO: sql database input using pdo
@@ -46,24 +45,24 @@ abstract class InputFormat {
 			description
 			url				*/
 
-	public abstract function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config);
+	public abstract function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config);
 	
-	public abstract function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config);
+	public abstract function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config);
 	
-	protected function file_read_due($filename,$cachedtime,$oldestinputok){
-		return $cachedtime <= @filemtime($filename) || $cachedtime <= $oldestinputok;
+	protected function file_read_due($filepath,$cachedtime,$oldestinputok){
+		return $cachedtime <= @filemtime($filepath) || $cachedtime <= $oldestinputok;
 	}
 	
 	protected function url_read_due($cachedtime,$oldestinputok){
 		return $cachedtime <= $oldestinputok;
 	}
 	
-	protected function get_error_filename($scriptname){
+	protected function get_error_filename($scriptdir,$scriptname){
 		return "$scriptname.error";
 	}
 	
-	protected function check_cached_error($scriptname){
-		$errorfile = $this->get_error_filename($scriptname);
+	protected function check_cached_error($scriptdir,$scriptname){
+		$errorfile = $this->get_error_filename($scriptdir,$scriptname);
 		$errortime = @filemtime($errorfile);
 		if($errortime===FALSE) return;
 		if(time() - $errortime > 20*60){ // error file is valid for 20 minutes
@@ -75,8 +74,8 @@ abstract class InputFormat {
 		return $error;		
 	}
 	
-	protected function cache_error($scriptname,$error){
-		$errorfile = $this->get_error_filename($scriptname);
+	protected function cache_error($scriptdir,$scriptname,$error){
+		$errorfile = $this->get_error_filename($scriptdir,$scriptname);
 		$handle = @fopen($errorfile,"w");
 		if($handle===FALSE) return;
 		fwrite($handle,$error);
@@ -86,13 +85,13 @@ abstract class InputFormat {
 
 class NoInput extends InputFormat {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "none") return FALSE;
 		return $this->get_empty_data();
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
-		$result = write_config($scriptname,array("format"=>"none"));
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
+		$result = write_config($scriptdir,$scriptname,array("format"=>"none"));
 		if($result) return $result;
 		return $this->get_empty_data();
 	}
@@ -339,68 +338,68 @@ abstract class HtmlInputBase extends InputFormat {
 
 class LocalHtmlInput extends HtmlInputBase {
 	
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "html-local") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!$this->is_available()) return FALSE;
-		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"html-local"));
+		if(!file_exists($this->get_filepath($scriptdir,$scriptname))) return FALSE;
+		$result = write_config($scriptdir,$scriptname,array("format"=>"html-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	private function get_filename($scriptname){
-		return "$scriptname-master.html";
+	private function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-master.html";
 	}
 	
-	protected function get_calendar_url($filename,$config){
-		return "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".$filename;
+	protected function get_calendar_url($filepath,$config){
+		return "http://".$_SERVER["HTTP_HOST"].dirname($_SERVER["REQUEST_URI"])."/".basename($filepath);
 	}
 
-	private function do_input($filename){
-		$handle = @fopen($filename,"r");
-		if($handle===FALSE) return "HTML: failed to open '$filename'";
-		$result = $this->stream_to_event_data($handle,$filename,$config);
+	private function do_input($filepath){
+		$handle = @fopen($filepath,"r");
+		if($handle===FALSE) return "HTML: failed to open '$filepath'";
+		$result = $this->stream_to_event_data($handle,$filepath,$config);
 		fclose($handle);
 		return $result;
 	}
 
-	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;		
-		$error = $this->check_cached_error($scriptname);
+	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if(!$this->file_read_due($filepath,$cachedtime,$oldestinputok)) return FALSE;		
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
-		$result = $this->do_input($filename);
-		if(is_string($result)) $this->cache_error($scriptname,$result);
+		$result = $this->do_input($filepath);
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);
 		return $result;
 	}
 }
 
 class RemoteHtmlInput extends HtmlInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "html-remote") return FALSE;
 		if(!$this->is_available()) return FALSE;
 		if(!isset($config["url"])) return "HTML: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".htm" && strtolower(substr($config["url"],-5,5)) != ".html") return FALSE;
-		$result = write_config($scriptname,array("format"=>"html-remote","url"=>$config["url"]));
+		$result = write_config($scriptdir,$scriptname,array("format"=>"html-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"],$config);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -416,12 +415,12 @@ class RemoteHtmlInput extends HtmlInputBase {
 		fclose($handle);
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url,$config){
+	public function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url,$config){
 		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
 		$result = $this->do_input($url);
-		if(is_string($result)) $this->cache_error($scriptname,$result);
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);
 		return $result;
 	}
 }
@@ -798,64 +797,64 @@ abstract class ICalendarInputBase extends InputFormat {
 
 class LocalICalendarInput extends ICalendarInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "icalendar-local") return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
-		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"icalendar-local"));
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
+		if(!file_exists($this->get_filepath($scriptdir,$scriptname))) return FALSE;
+		$result = write_config($scriptdir,$scriptname,array("format"=>"icalendar-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	private function get_filename($scriptname){
-		return "$scriptname-master.ics";
+	private function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-master.ics";
 	}
 
-	private function do_input($filename){
-		$handle = @fopen($filename,"r");
-		if($handle === FALSE) return "ICalendar: Failed to open '$filename'";
+	private function do_input($filepath){
+		$handle = @fopen($filepath,"r");
+		if($handle === FALSE) return "ICalendar: Failed to open '$filepath'";
 		$data = $this->feed_to_event_data($handle);
 		fclose($handle);
 		return $data;
 	}
 
-	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if(!$this->file_read_due($filepath,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
-		$data = $this->do_input($filename);
-		if(is_string($data)) $this->cache_error($scriptname,$data);		
+		$data = $this->do_input($filepath);
+		if(is_string($data)) $this->cache_error($scriptdir,$scriptname,$data);		
 		return $data;
 	}
 }
 
 class RemoteICalendarInput extends ICalendarInputBase {
 	
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "icalendar-remote") return FALSE;
 		if(!isset($config["url"])) return "ICalendar: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".ics"
 				&& strtolower(substr($config["url"],-5,5))  != ".ical"
 				&& strtolower(substr($config["url"],-10,10)) != ".icalendar")
 			return FALSE;
-		$result = write_config($scriptname,array("format"=>"icalendar-remote","url"=>$config["url"]));
+		$result = write_config($scriptdir,$scriptname,array("format"=>"icalendar-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -868,12 +867,12 @@ class RemoteICalendarInput extends ICalendarInputBase {
 		return $result;
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url){
+	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url){
 		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
 		$result = $this->do_input($url);
-		if(is_string($result)) $this->cache_error($scriptname,$result);		
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);		
 		return $result;
 	}
 	
@@ -1033,42 +1032,42 @@ abstract class CsvInputBase extends InputFormat {
 
 class LocalCsvInput extends CsvInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "csv-local") return FALSE;
 		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$delimiter);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
-		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv-local", "delimiter"=>","));
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
+		if(!file_exists($this->get_filepath($scriptdir,$scriptname))) return FALSE;
+		$result = write_config($scriptdir,$scriptname,array("format"=>"csv-local", "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,",");
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	private function get_filename($scriptname){
-		return "$scriptname-master.csv";
+	private function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-master.csv";
 	}
 	
-	private function do_input($filename,$delimiter){
-		$handle = @fopen($filename,"r");
-		if($handle === FALSE) return "CSV: Failed to open '$filename'";
+	private function do_input($filepath,$delimiter){
+		$handle = @fopen($filepath,"r");
+		if($handle === FALSE) return "CSV: Failed to open '$filepath'";
 		$result = $this->stream_to_event_data($handle,$delimiter);
 		fclose($handle);		
 		return $result;
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$delimiter){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$delimiter){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if(!$this->file_read_due($filepath,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
-		$result = $this->do_input($filename,$delimiter);
-		if(is_string($result)) $this->cache_error($scriptname,$result);
+		$result = $this->do_input($filepath,$delimiter);
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);
 		return $result;
 	}
 
@@ -1076,21 +1075,21 @@ class LocalCsvInput extends CsvInputBase {
 
 class RemoteCsvInput extends CsvInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "csv-remote") return FALSE;
 		if(!isset($config["url"])) return "CSV: missing config parameter: 'url'";
 		$delimiter = isset($config["delimiter"]) ? $config["delimiter"] : ",";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],$delimiter);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"],$delimiter);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".csv") return FALSE;
-		$result = write_config($scriptname,array("format"=>"csv-remote","url"=>$config["url"], "delimiter"=>","));
+		$result = write_config($scriptdir,$scriptname,array("format"=>"csv-remote","url"=>$config["url"], "delimiter"=>","));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"],",");
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"],",");
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1103,12 +1102,12 @@ class RemoteCsvInput extends CsvInputBase {
 		return $result;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url,$delimiter){
+	public function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url,$delimiter){
 		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
 		$result = $this->do_input($url,$delimiter);
-		if(is_string($result)) $this->cache_error($scriptname,$result);		
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);		
 		return $result;
 	}
 
@@ -1197,63 +1196,63 @@ abstract class JsonInputBase extends InputFormat {
 
 class LocalJsonInput extends JsonInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "json-local") return FALSE;
 		if(!$this->is_available()) return FALSE;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!$this->is_available()) return FALSE;
-		if(!file_exists($this->get_filename($scriptname))) return FALSE;
-		$result = write_config($scriptname,array("format"=>"json-local"));
+		if(!file_exists($this->get_filepath($scriptdir,$scriptname))) return FALSE;
+		$result = write_config($scriptdir,$scriptname,array("format"=>"json-local"));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 
-	private function get_filename($scriptname){
-		return "$scriptname-master.json";
+	private function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-master.json";
 	}
 	
-	private function do_input($filename){
-		$handle = @fopen($filename,"r");
-		if($handle===FALSE) return "JSON: Failed to open '$filename'";
+	private function do_input($filepath){
+		$handle = @fopen($filepath,"r");
+		if($handle===FALSE) return "JSON: Failed to open '$filepath'";
 		$result = $this->stream_to_event_data($handle);
 		fclose($handle);
 		return $result;
 	}
 	
-	private function input_if_necessary($scriptname,$cachedtime,$oldestinputok){
-		$filename = $this->get_filename($scriptname);
-		if(!$this->file_read_due($filename,$cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if(!$this->file_read_due($filepath,$cachedtime,$oldestinputok)) return FALSE;
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
-		$result = $this->do_input($filename);
-		if(is_string($result)) $this->cache_error($scriptname,$result);		
+		$result = $this->do_input($filepath);
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);		
 		return $result;
 	}
 }
 
 class RemoteJsonInput extends JsonInputBase {
 
-	public function attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
 		if($formatname != "json-remote") return FALSE;
 		if(!isset($config["url"])) return "JSON: missing config parameter: 'url'";
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
 	
-	public function attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config){
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
 		if(!isset($config["url"])) return FALSE;
 		if(strtolower(substr($config["url"],-4,4)) != ".json") return FALSE;
-		$result = write_config($scriptname,array("format"=>"json-remote","url"=>$config["url"]));
+		$result = write_config($scriptdir,$scriptname,array("format"=>"json-remote","url"=>$config["url"]));
 		if($result) return $result;
-		$result = $this->input_if_necessary($scriptname,$cachedtime,$oldestinputok,$config["url"]);
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config["url"]);
 		if($result === FALSE) return TRUE;
 		return $result;
 	}
@@ -1266,12 +1265,12 @@ class RemoteJsonInput extends JsonInputBase {
 		return $result;
 	}
 	
-	public function input_if_necessary($scriptname,$cachedtime,$oldestinputok,$url){
+	public function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url){
 		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
-		$error = $this->check_cached_error($scriptname);
+		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
 		$result = $this->do_input($url);
-		if(is_string($result)) $this->cache_error($scriptname,$result);
+		if(is_string($result)) $this->cache_error($scriptdir,$scriptname,$result);
 		return $result;
 	}
 }
@@ -1288,25 +1287,25 @@ abstract class OutputFormat {
 			description
 			url					*/
 
-	public abstract function write_file_if_possible($scriptname,$data,$output_formats);
+	public abstract function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats);
 
-	public abstract function attempt_handle_include($scriptname,$output_formats,$input_formats,$params);
+	public abstract function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 
-	public abstract function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params);
+	public abstract function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	
-	public abstract function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params);
+	public abstract function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params);
 
-	public abstract function attempt_protocolless_url_by_name($name,$scriptname);
+	public abstract function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname);
 
-	protected abstract function get_filename($scriptname);
+	protected abstract function get_filepath($scriptdir,$scriptname);
 	
-	protected abstract function output($scriptname,$params);
+	protected abstract function output($scriptdir,$scriptname,$params);
 
-	protected function handle($scriptname,$output_formats,$input_formats,$params){
-		$filename = $this->get_filename($scriptname);
-		$error = update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats);
+	protected function handle($scriptdir,$scriptname,$output_formats,$input_formats,$params){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		$error = update_cached_if_necessary($scriptdir,$scriptname,$filepath,$output_formats,$input_formats);
 		if($error) return $error;
-		$error = $this->output($scriptname,$params);
+		$error = $this->output($scriptdir,$scriptname,$params);
 		if($error) return $error;
 	}
 
@@ -1320,17 +1319,17 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	protected function url_for_format($name,$scriptname,$output_formats){
+	protected function url_for_format($name,$scriptdir,$scriptname,$output_formats){
 		foreach($output_formats as $format){
-			$url = $format->attempt_protocolless_url_by_name($name,$scriptname);
+			$url = $format->attempt_protocolless_url_by_name($name,$scriptdir,$scriptname);
 			if($url !== FALSE) return $url;
 		}
 		return FALSE;
 	}
 
-	protected function make_button_fragment($doc,$scriptname,$output_formats){
+	protected function make_button_fragment($doc,$scriptdir,$scriptname,$output_formats){
 	
-		$urlical = $this->url_for_format("icalendar",$scriptname,$output_formats);
+		$urlical = $this->url_for_format("icalendar",$scriptdir,$scriptname,$output_formats);
 	
 		$fragment = $doc->createDocumentFragment();
 	
@@ -1394,7 +1393,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemlive);
 					}
 				
-					$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
+					$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats);
 					if($urlrss!==FALSE){			
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1407,7 +1406,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemrss);
 					}
 					
-					$urljson = $this->url_for_format("json", $scriptname,$output_formats);
+					$urljson = $this->url_for_format("json", $scriptdir,$scriptname,$output_formats);
 					if($urljson!==FALSE){
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1421,7 +1420,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemjson);
 					}
 					
-					$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
+					$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats);
 					if($urlxml!==FALSE){				
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1435,7 +1434,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemxml);
 					}
 					
-					$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
+					$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats);
 					if($urlsexp!==FALSE){
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1471,7 +1470,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return $fragment;	
 	}
 
-	protected function make_calendar_fragment($doc,$scriptname,$data,$output_formats){
+	protected function make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats){
 	
 		$time = time();
 		$cal = new Calendar($time);
@@ -1498,7 +1497,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcontainer->appendChild($eltitle);
 			}
 	
-			$elsubbutton = $this->make_button_fragment($doc,$scriptname,$output_formats);
+			$elsubbutton = $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats);
 			$elcontainer->appendChild($elsubbutton);
 	
 			if(isset($data->description)){
@@ -1722,27 +1721,27 @@ class HtmlFullOutput extends HtmlOutputBase {
 
 	const FORMAT_NAME = "html";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/html"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($name){
-		return "$name.html";
+	protected function get_filepath($scriptdir,$name){
+		return $scriptdir."/".$name.".html";
 	}
 
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 	
 		$dom = new DOMImplementation();
@@ -1788,7 +1787,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elvport->setAttribute("content","width=device-width");
 				$elhead->appendChild($elvport);
 	
-				$urlrss = $this->url_for_format("rss", $scriptname, $output_formats);
+				$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats);
 				if($urlrss!==FALSE){
 					$elrsslink = $doc->createElement("link");
 					$elrsslink->setAttribute("rel","alternate");
@@ -1798,7 +1797,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elrsslink);
 				}
 				
-				$urlical = $this->url_for_format("icalendar", $scriptname, $output_formats);
+				$urlical = $this->url_for_format("icalendar", $scriptdir,$scriptname, $output_formats);
 				if($urlical!==FALSE){
 					$elicallink = $doc->createElement("link");
 					$elicallink->setAttribute("rel","alternate");
@@ -1808,7 +1807,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elicallink);
 				}
 				
-				$urljson = $this->url_for_format("json", $scriptname, $output_formats);
+				$urljson = $this->url_for_format("json", $scriptdir,$scriptname, $output_formats);
 				if($urljson!==FALSE){
 					$eljsonlink = $doc->createElement("link");
 					$eljsonlink->setAttribute("rel","alternate");
@@ -1818,7 +1817,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($eljsonlink);
 				}
 				
-				$urlxml = $this->url_for_format("xml", $scriptname, $output_formats);
+				$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats);
 				if($urlxml!==FALSE){
 					$elxmllink = $doc->createElement("link");
 					$elxmllink->setAttribute("rel", "alternate");
@@ -1828,7 +1827,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elxmllink);
 				}
 				
-				$urlsexp = $this->url_for_format("s-exp", $scriptname, $output_formats);
+				$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats);
 				if($urlsexp!==FALSE){
 					$elsexplink = $doc->createElement("link");
 					$elsexplink->setAttribute("rel","alternate");
@@ -1843,28 +1842,28 @@ class HtmlFullOutput extends HtmlOutputBase {
 			$elbody = $doc->createElement("body");
 			$elbody->setAttribute("style","background-color: rgb(100,200,200);");
 	
-				$elfrag = $this->make_calendar_fragment($doc,$scriptname,$data,$output_formats);
+				$elfrag = $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats);
 				$elbody->appendChild($elfrag);
 	
 			$elhtml->appendChild($elbody);
 		$doc->appendChild($elhtml);
 	
-		$filename = $this->get_filename($scriptname);
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		$doc->formatOutput = TRUE;
-		if( @$doc->saveHTMLFile($filename) === FALSE){
-			return "Failed to write ".$filename;
+		if( @$doc->saveHTMLFile($filepath) === FALSE){
+			return "Failed to write ".$filepath;
 		}
 	}
 		
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: text/html; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -1875,43 +1874,43 @@ class HtmlFragOutput extends HtmlOutputBase {
 
 	const FORMAT_NAME = "html-frag";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!$this->is_available()) return FALSE;
-		$result = $this->handle($scriptname,$output_formats,$input_formats);
+		$result = $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 		// echo rather than return, to avoid 500 response from include
 		if($result) echo $result;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 
-	protected function get_filename($scriptname){
-		return "$scriptname-frag.html";	
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-frag.html";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 	
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_calendar_fragment($doc,$scriptname,$data,$output_formats) );
+		$doc->appendChild( $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats) );
 		$doc->formatOutput = TRUE;
- 		$doc->saveHTMLFile($this->get_filename($scriptname)); 
+ 		$doc->saveHTMLFile($this->get_filepath($scriptdir,$scriptname)); 
 	}
 	
-	public function output($scriptname,$params){
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+	public function output($scriptdir,$scriptname,$params){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -1922,55 +1921,55 @@ class HtmlButtonOutput extends HtmlOutputBase {
 
 	const FORMAT_NAME = "html-button";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	protected function get_filename($scriptname){
-		return "$scriptname-button.html";
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname."-button.html";
 	}
 
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
-		$filename = $this->get_filename($scriptname);
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		// output type is special - don't need to keep it up to date
-		if(file_exists($filename)) return; 
+		if(file_exists($filepath)) return; 
 		
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_button_fragment($doc,$scriptname,$output_formats) );
+		$doc->appendChild( $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats) );
 		$doc->formatOutput = TRUE;
- 		$doc->saveHTMLFile($filename); 
+ 		$doc->saveHTMLFile($filepath); 
 	}
 	
-	protected function output($scriptname,$params){
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+	protected function output($scriptdir,$scriptname,$params){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}		
 	}
 
-	protected function handle($scriptname,$output_formats,$input_formats,$params){
-		$filename = $this->get_filename($scriptname);
+	protected function handle($scriptdir,$scriptname,$output_formats,$input_formats,$params){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		// output type is special - its never out of date and needn't trigger generation of 
 		// other outputs, only itself
-		if(!file_exists($filename)){
-			$this->write_file_if_possible($scriptname,NULL,$output_formats);
+		if(!file_exists($filepath)){
+			$this->write_file_if_possible($scriptdir,$scriptname,NULL,$output_formats);
 		}
-		$error = $this->output($scriptname,$params);
+		$error = $this->output($scriptdir,$scriptname,$params);
 		if($error) return $error;
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -1998,47 +1997,47 @@ class JsonOutput extends JsonOutputBase {
 
 	const FORMAT_NAME = "json";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/json","text/json"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($scriptname){
-		return $scriptname.".json";	
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
-		$filename = $this->get_filename($scriptname);
-		$handle = @fopen($filename,"w");
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
-			return "Failed to open ".$filename." for writing";
+			return "Failed to open ".$filepath." for writing";
 		}
 		$this->write_to_stream($handle,$data);
 		fclose($handle);
 	}
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: application/json; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -2049,54 +2048,54 @@ class JsonPOutput extends JsonOutputBase {
 
 	const FORMAT_NAME = "jsonp";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/javascript","text/javascript"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($scriptname){
-		return $scriptname.".json";	
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
-		$filename = $this->get_filename($scriptname);
-		$handle = @fopen($filename,"w");
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
-			return "Failed to open ".$filename." for writing";
+			return "Failed to open ".$filepath." for writing";
 		}
 		$this->write_to_stream($handle,$data);
 		fclose($handle);
 	}
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		if(!isset($params["callback"]) || strlen(trim($params["callback"]))==0){
 			$callback = "receive_calendar_data";
 		}else{
 			$callback = trim($params["callback"]);
 		}
 		header("Content-Type: application/javascript; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		echo "$callback(";
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}
 		echo ");";
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -2107,22 +2106,22 @@ class SExpressionOutput extends OutputFormat {
 
 	const FORMAT_NAME = "s-exp";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;	
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/x-lisp","text/x-script.lisp"))) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	protected function get_filename($name){
-		return "$name.lsp";
+	protected function get_filepath($scriptdir,$name){
+		return $scriptdir."/".$name.".lsp";
 	}
 
 	private function escape($text){
@@ -2132,11 +2131,11 @@ class SExpressionOutput extends OutputFormat {
 			str_replace("\\","\\\\",$text));
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
-		$filename = $this->get_filename($scriptname);
-		$handle = @fopen($filename,"w");
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
-			return "Failed to open file $filename for writing";
+			return "Failed to open file $filepath for writing";
 		}
 		fwrite($handle,"(calendar");
 		if(isset($data->name)){
@@ -2166,15 +2165,15 @@ class SExpressionOutput extends OutputFormat {
 		fclose($handle);
 	}	
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: application/x-lisp; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE){
-			return "Error reading $filename";
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE){
+			return "Error reading $filepath";
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
 	}
@@ -2184,22 +2183,22 @@ class ICalendarOutput extends OutputFormat {
 
 	const FORMAT_NAME = "icalendar";
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/calendar"))) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($name){
-		return $name.".ics";
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname.".ics";
 	}
 	
 	private function wrap($text){
@@ -2220,11 +2219,11 @@ class ICalendarOutput extends OutputFormat {
 			$text);
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
-		$filename = $this->get_filename($scriptname);
-		$handle = @fopen($filename,"w");
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
-			return "Failed to open ".$filename." for writing";
+			return "Failed to open ".$filepath." for writing";
 		}
 		fwrite($handle,"BEGIN:VCALENDAR\r\n");
 		fwrite($handle,"VERSION:2.0\r\n");
@@ -2257,15 +2256,15 @@ class ICalendarOutput extends OutputFormat {
 		fclose($handle);
 	}
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: text/calendar; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE){
-			return "Error reading ".$filename;
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE){
+			return "Error reading ".$filepath;
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
 	}
@@ -2279,27 +2278,27 @@ class RssOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("application/rss+xml","application/rss"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($scriptname){
-		return "$scriptname.rss";
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname.".rss";
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 		
 		$doc = new DOMDocument();
@@ -2362,22 +2361,22 @@ class RssOutput extends OutputFormat {
 	
 		$doc->appendChild($elrss);
 	
-		$filename = $this->get_filename($scriptname);
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		$doc->formatOutput = TRUE;
-		if( @$doc->save($filename) === FALSE ){
-			return "Failed to write ".$filename;
+		if( @$doc->save($filepath) === FALSE ){
+			return "Failed to write ".$filepath;
 		}
 	}
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: application/rss+xml; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -2392,27 +2391,27 @@ class XmlOutput extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	public function attempt_handle_include($scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		return FALSE;	
 	}
 	
-	public function attempt_handle_by_name($name,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_name($name,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if($name!=self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 	
-	public function attempt_handle_by_mime_type($mimetype,$scriptname,$output_formats,$input_formats,$params){
+	public function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params){
 		if(!in_array($mimetype,array("text/xml","application/xml"))) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return $this->handle($scriptname,$output_formats,$input_formats,$params);
+		return $this->handle($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 	}
 
-	protected function get_filename($scriptname){
-		return "$scriptname.xml";
+	protected function get_filepath($scriptdir,$scriptname){
+		return $scriptdir."/".$scriptname.".xml";
 	}
 	
-	public function write_file_if_possible($scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
 		if(!$this->is_available()) return;
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
@@ -2485,22 +2484,22 @@ class XmlOutput extends OutputFormat {
 	
 		$doc->createAttributeNS($namespace,"xmlns");
 		
-		$filename = $this->get_filename($scriptname);
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		$doc->formatOutput = TRUE;
-		if( @$doc->save($filename) === FALSE ){
-			return "Failed to write ".$filename;
+		if( @$doc->save($filepath) === FALSE ){
+			return "Failed to write ".$filepath;
 		}
 	}	
 	
-	public function output($scriptname,$params){
+	public function output($scriptdir,$scriptname,$params){
 		header("Content-Type: application/xml; charset=".character_encoding_of_output());
-		$filename = $this->get_filename($scriptname);
-		if( @readfile($filename) === FALSE ){
-			return "Error reading ".$filename;	
+		$filepath = $this->get_filepath($scriptdir,$scriptname);
+		if( @readfile($filepath) === FALSE ){
+			return "Error reading ".$filepath;	
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
 		return "//".$_SERVER["HTTP_HOST"].$_SERVER["REQUEST_URI"]."?format=".self::FORMAT_NAME;
@@ -4987,15 +4986,15 @@ function http_request($url){
 	}
 }
 
-function get_config_filename($scriptname){
-	return "$scriptname-config.php";
+function get_config_filepath($scriptdir,$scriptname){
+	return $scriptdir."/".$scriptname."-config.php";
 }
 
-function write_config($scriptname,$config){
-	$filename = get_config_filename($scriptname);
-	$handle = fopen($filename,"w");
+function write_config($scriptdir,$scriptname,$config){
+	$filepath = get_config_filepath($scriptdir,$scriptname);
+	$handle = fopen($filepath,"w");
 	if($handle === FALSE){
-		return "Failed to open '$filename' for writing";
+		return "Failed to open '$filepath' for writing";
 	}
 	fwrite($handle,"<?php\n");
 	fwrite($handle,"return array(\n");
@@ -5010,17 +5009,17 @@ function debug_dump($var){
 	foreach(explode("\n",var_export($var,TRUE)) as $line) error_log($line);
 }
 
-function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldestinputok){
-	$filename = get_config_filename($scriptname);
-	if(file_exists($filename)){
-		$config = include $filename;
+function read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok){
+	$filepath = get_config_filepath($scriptdir,$scriptname);
+	if(file_exists($filepath)){
+		$config = include $filepath;
 	}else{
 		$config = array();
 	}
 	if(isset($config["format"])){	
 		$formatname = $config["format"];
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_name($scriptname,$formatname,$cachedtime,$oldestinputok,$config);
+			$result = $format->attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config);
 			if(is_string($result)) return $result; # error
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -5028,7 +5027,7 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldesti
 		return "Failed to read input for format '$formatname'";
 	}else{
 		foreach($input_formats as $format){
-			$result = $format->attempt_handle_by_discovery($scriptname,$cachedtime,$oldestinputok,$config);
+			$result = $format->attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config);
 			if(is_string($result)) return $result; # error;
 			if($result === TRUE) return FALSE; # handled, not modified
 			if($result !== FALSE) return $result; # handled, data
@@ -5037,11 +5036,11 @@ function read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldesti
 	}
 }
 
-function update_cached_if_necessary($scriptname,$filename,$output_formats,$input_formats){
-	if(file_exists($filename)){
-		$cachedtime = @filemtime($filename);
+function update_cached_if_necessary($scriptdir,$scriptname,$filepath,$output_formats,$input_formats){
+	if(file_exists($filepath)){
+		$cachedtime = @filemtime($filepath);
 		if($cachedtime === FALSE){
-			return "Failed to determine last modified time for ".$filename;
+			return "Failed to determine last modified time for ".$filepath;
 		}
 	}else{
 		$cachedtime = 0;
@@ -5050,19 +5049,19 @@ function update_cached_if_necessary($scriptname,$filename,$output_formats,$input
 	$cal = new Calendar(time());	
 	$cal->set_time(0,0,0);
 	$oldestinputok = $cal->time;	
-	$data = read_input_if_necessary($scriptname,$input_formats,$cachedtime,$oldestinputok);	
+	$data = read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok);	
 	if(is_string($data)) return $data; // error
 	if($data===FALSE) return;          // not modified
 	
 	$data->events = generate_events($data);
 	unset($data->{"recurring-events"});
 	foreach($output_formats as $format){
-		$error = $format->write_file_if_possible($scriptname,$data,$output_formats);
+		$error = $format->write_file_if_possible($scriptdir,$scriptname,$data,$output_formats);
 		if($error) return $error;
 	}
 }
 
-function attempt_handle($scriptname,$output_formats,$input_formats){
+function attempt_handle($scriptdir,$scriptname,$output_formats,$input_formats){
 
 	// check PHP version
 	$required = "5.3";
@@ -5071,7 +5070,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	// included from another script
 	if(basename(__FILE__) != basename($_SERVER["SCRIPT_FILENAME"])){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_include($scriptname,$output_formats,$input_formats,$_GET);
+			$result = $format->attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -5081,7 +5080,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	if(array_key_exists("format",$_GET)){
 		$formatname = $_GET["format"];
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_name($formatname,$scriptname,$output_formats,$input_formats,$_GET);
+			$result = $format->attempt_handle_by_name($formatname,$scriptdir,$scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -5103,7 +5102,7 @@ function attempt_handle($scriptname,$output_formats,$input_formats){
 	arsort($acceptlist);
 	foreach($acceptlist as $accept => $quality){
 		foreach($output_formats as $format){
-			$result = $format->attempt_handle_by_mime_type($accept,$scriptname,$output_formats,$input_formats,$_GET);
+			$result = $format->attempt_handle_by_mime_type($accept,$scriptdir,$scriptname,$output_formats,$input_formats,$_GET);
 			if($result===FALSE) continue; // wasn't handled
 			if($result) return $result;   // handled, got error
 			return;                       // handled, all done
@@ -5138,10 +5137,13 @@ $input_formats = array(
 	new NoInput()
 );
 
-$result = attempt_handle(basename(__FILE__,".php"),$output_formats,$input_formats);
+/*$result = attempt_handle(dirname(__FILE__),basename(__FILE__,".php"),$output_formats,$input_formats);
 if($result===FALSE){
 	header("HTTP/1.0 406 Not Acceptable");	
 }elseif($result){
 	header("HTTP/1.0 500 Internal Server Error");
 	die($result);
 }
+*/
+
+var_dump($_SERVER);
