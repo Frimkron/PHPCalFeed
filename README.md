@@ -499,7 +499,7 @@ export your event data from Outlook, follow the instructions below. These
 instructions are for Outlook 2010, but the process will be similar for your 
 version of Outlook.
 
-#. From the menu bar select "File"> "Open" > "Import"
+#. From the menu bar select "File" > "Open" > "Import"
 #. A wizard will appear. Choose "Export to a file" from the list and click "Next"
 #. Select "Comma Separated Values (Windows)" and click "Next"
 #. Select "Calendar" and click "Next"
@@ -624,6 +624,25 @@ that this is present in the same directory as the calendar script.
 You can edit `calendar-sub.png` and `calendar-sub.css` to change the look and 
 feel of the subscribe button. For more information see the 
 [Re-styling the HTML Calendar](#37-re-styling-the-html-calendar) section.
+
+If no links appear in the subscribe button's pop-up menu, or links do appear
+but go to the wrong address, you may need to define the URL of the calendar
+script explicitly. Create the file `calendar-config.php` in the same directory
+as the calendar script, if it doesn't exist already, and add the `script-url`
+property as follows:
+
+`````````````````````````````````````````````````````````````` php
+
+<?php
+return array(
+	'script-url' => 'http://example.com/calendar/calendar.php'
+);
+
+
+``````````````````````````````````````````````````````````````
+
+Delete `calendar-button.html` to clear the cache, and generate the subscribe
+button again with `?format=html-button` as above.
 
 
 #### 3.3.2 Linking Directly to Feeds

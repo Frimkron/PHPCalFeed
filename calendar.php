@@ -1,6 +1,11 @@
 <?php
 
-// TODO: html links back to script are broken for include mode
+/*	
+	PHPCalFeed
+	A calendar feed script
+	Copyright (C) 2014 Mark Frimston 
+	mfrimston@gmail.com 
+*/
 
 // TODO: move heavy lifting to included file?
 // TODO: events which started in the past but are still ongoing are excluded from feeds
@@ -8,6 +13,8 @@
 // TODO: sql database input using pdo
 // TODO: icalendar proper timezone construction
 // TODO: CalDAV
+// TODO: format for screen readers
+// TODO: format for printing
 // TODO: facebook input
 // TODO: wordpress api
 // TODO: eventbrite input
@@ -293,7 +300,8 @@ abstract class HtmlInputBase extends InputFormat {
 			if(is_string($calurl)) return $calurl;
 			if($calurl!==FALSE) $data->url = $calurl["text"];
 		}else{
-			$data->url = $this->get_calendar_url($resource_name,$config);
+			$calurl = $this->get_calendar_url($resource_name,$config);
+			if($calurl!==FALSE) $data->url = $calurl;
 		}
 		$event_els = $this->get_xpath_result($doc->documentElement,$xpath,$xp_event);
 		if(is_string($event_els)) return $event_els;
@@ -361,7 +369,9 @@ class LocalHtmlInput extends HtmlInputBase {
 	}
 	
 	protected function get_calendar_url($filepath,$config){
-		return "http:".get_file_protocolless_url($filepath);
+		$url = get_file_protocolless_url($filepath,$config);
+		if($url===FALSE) return FALSE;
+		return "http:".$url;
 	}
 
 	private function do_input($filepath){
@@ -1287,7 +1297,7 @@ abstract class OutputFormat {
 			description
 			url					*/
 
-	public abstract function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats);
+	public abstract function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config);
 
 	public abstract function attempt_handle_include($scriptdir,$scriptname,$output_formats,$input_formats,$params);
 
@@ -1295,7 +1305,7 @@ abstract class OutputFormat {
 	
 	public abstract function attempt_handle_by_mime_type($mimetype,$scriptdir,$scriptname,$output_formats,$input_formats,$params);
 
-	public abstract function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname);
+	public abstract function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config);
 
 	protected abstract function get_filepath($scriptdir,$scriptname);
 	
@@ -1319,17 +1329,17 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return extension_loaded("libxml") && extension_loaded("dom");
 	}
 
-	protected function url_for_format($name,$scriptdir,$scriptname,$output_formats){
+	protected function url_for_format($name,$scriptdir,$scriptname,$output_formats,$config){
 		foreach($output_formats as $format){
-			$url = $format->attempt_protocolless_url_by_name($name,$scriptdir,$scriptname);
+			$url = $format->attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config);
 			if($url !== FALSE) return $url;
 		}
 		return FALSE;
 	}
 
-	protected function make_button_fragment($doc,$scriptdir,$scriptname,$output_formats){
+	protected function make_button_fragment($doc,$scriptdir,$scriptname,$output_formats,$config){
 	
-		$urlical = $this->url_for_format("icalendar",$scriptdir,$scriptname,$output_formats);
+		$urlical = $this->url_for_format("icalendar",$scriptdir,$scriptname,$output_formats,$config);
 	
 		$fragment = $doc->createDocumentFragment();
 	
@@ -1393,7 +1403,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemlive);
 					}
 				
-					$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats);
+					$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats,$config);
 					if($urlrss!==FALSE){			
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1406,7 +1416,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemrss);
 					}
 					
-					$urljson = $this->url_for_format("json", $scriptdir,$scriptname,$output_formats);
+					$urljson = $this->url_for_format("json", $scriptdir,$scriptname,$output_formats,$config);
 					if($urljson!==FALSE){
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1420,7 +1430,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemjson);
 					}
 					
-					$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats);
+					$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats,$config);
 					if($urlxml!==FALSE){				
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1434,7 +1444,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 						$elmenu->appendChild($elitemxml);
 					}
 					
-					$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats);
+					$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats,$config);
 					if($urlsexp!==FALSE){
 						$white = $doc->createTextNode("\n        ");
 						$elmenu->appendChild($white);
@@ -1470,7 +1480,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 		return $fragment;	
 	}
 
-	protected function make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats){
+	protected function make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats,$config){
 	
 		$time = time();
 		$cal = new Calendar($time);
@@ -1497,7 +1507,7 @@ abstract class HtmlOutputBase extends OutputFormat {
 				$elcontainer->appendChild($eltitle);
 			}
 	
-			$elsubbutton = $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats);
+			$elsubbutton = $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats,$config);
 			$elcontainer->appendChild($elsubbutton);
 	
 			if(isset($data->description)){
@@ -1741,7 +1751,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 		return $scriptdir."/".$name.".html";
 	}
 
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 	
 		$dom = new DOMImplementation();
@@ -1787,7 +1797,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 				$elvport->setAttribute("content","width=device-width");
 				$elhead->appendChild($elvport);
 	
-				$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats);
+				$urlrss = $this->url_for_format("rss", $scriptdir,$scriptname, $output_formats,$config);
 				if($urlrss!==FALSE){
 					$elrsslink = $doc->createElement("link");
 					$elrsslink->setAttribute("rel","alternate");
@@ -1797,7 +1807,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elrsslink);
 				}
 				
-				$urlical = $this->url_for_format("icalendar", $scriptdir,$scriptname, $output_formats);
+				$urlical = $this->url_for_format("icalendar", $scriptdir,$scriptname, $output_formats,$config);
 				if($urlical!==FALSE){
 					$elicallink = $doc->createElement("link");
 					$elicallink->setAttribute("rel","alternate");
@@ -1807,7 +1817,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elicallink);
 				}
 				
-				$urljson = $this->url_for_format("json", $scriptdir,$scriptname, $output_formats);
+				$urljson = $this->url_for_format("json", $scriptdir,$scriptname, $output_formats,$config);
 				if($urljson!==FALSE){
 					$eljsonlink = $doc->createElement("link");
 					$eljsonlink->setAttribute("rel","alternate");
@@ -1817,7 +1827,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($eljsonlink);
 				}
 				
-				$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats);
+				$urlxml = $this->url_for_format("xml", $scriptdir,$scriptname, $output_formats,$config);
 				if($urlxml!==FALSE){
 					$elxmllink = $doc->createElement("link");
 					$elxmllink->setAttribute("rel", "alternate");
@@ -1827,7 +1837,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 					$elhead->appendChild($elxmllink);
 				}
 				
-				$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats);
+				$urlsexp = $this->url_for_format("s-exp", $scriptdir,$scriptname, $output_formats,$config);
 				if($urlsexp!==FALSE){
 					$elsexplink = $doc->createElement("link");
 					$elsexplink->setAttribute("rel","alternate");
@@ -1842,7 +1852,7 @@ class HtmlFullOutput extends HtmlOutputBase {
 			$elbody = $doc->createElement("body");
 			$elbody->setAttribute("style","background-color: rgb(100,200,200);");
 	
-				$elfrag = $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats);
+				$elfrag = $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats,$config);
 				$elbody->appendChild($elfrag);
 	
 			$elhtml->appendChild($elbody);
@@ -1863,10 +1873,12 @@ class HtmlFullOutput extends HtmlOutputBase {
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -1894,11 +1906,11 @@ class HtmlFragOutput extends HtmlOutputBase {
 		return $scriptdir."/".$scriptname."-frag.html";	
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 	
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats) );
+		$doc->appendChild( $this->make_calendar_fragment($doc,$scriptdir,$scriptname,$data,$output_formats,$config) );
 		$doc->formatOutput = TRUE;
  		$doc->saveHTMLFile($this->get_filepath($scriptdir,$scriptname)); 
 	}
@@ -1910,10 +1922,12 @@ class HtmlFragOutput extends HtmlOutputBase {
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -1939,14 +1953,14 @@ class HtmlButtonOutput extends HtmlOutputBase {
 		return $scriptdir."/".$scriptname."-button.html";
 	}
 
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		// output type is special - don't need to keep it up to date
 		if(file_exists($filepath)) return; 
 		
 		$doc = new DOMDocument();
-		$doc->appendChild( $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats) );
+		$doc->appendChild( $this->make_button_fragment($doc,$scriptdir,$scriptname,$output_formats,$config) );
 		$doc->formatOutput = TRUE;
  		$doc->saveHTMLFile($filepath); 
 	}
@@ -1963,16 +1977,19 @@ class HtmlButtonOutput extends HtmlOutputBase {
 		// output type is special - its never out of date and needn't trigger generation of 
 		// other outputs, only itself
 		if(!file_exists($filepath)){
-			$this->write_file_if_possible($scriptdir,$scriptname,NULL,$output_formats);
+			$config = get_config($scriptdir,$scriptname);
+			$this->write_file_if_possible($scriptdir,$scriptname,NULL,$output_formats,$config);
 		}
 		$error = $this->output($scriptdir,$scriptname,$params);
 		if($error) return $error;
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if(!$this->is_available()) return FALSE;
 		if($name != self::FORMAT_NAME) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2017,7 +2034,7 @@ class JsonOutput extends JsonOutputBase {
 		return $scriptdir."/".$scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 		
 		$filepath = $this->get_filepath($scriptdir,$scriptname);
@@ -2037,10 +2054,12 @@ class JsonOutput extends JsonOutputBase {
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2068,7 +2087,7 @@ class JsonPOutput extends JsonOutputBase {
 		return $scriptdir."/".$scriptname.".json";	
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 		
 		$filepath = $this->get_filepath($scriptdir,$scriptname);
@@ -2095,10 +2114,12 @@ class JsonPOutput extends JsonOutputBase {
 		echo ");";
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2131,7 +2152,7 @@ class SExpressionOutput extends OutputFormat {
 			str_replace("\\","\\\\",$text));
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
@@ -2173,9 +2194,11 @@ class SExpressionOutput extends OutputFormat {
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2219,7 +2242,7 @@ class ICalendarOutput extends OutputFormat {
 			$text);
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		$filepath = $this->get_filepath($scriptdir,$scriptname);
 		$handle = @fopen($filepath,"w");
 		if($handle === FALSE){
@@ -2264,9 +2287,11 @@ class ICalendarOutput extends OutputFormat {
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2298,7 +2323,7 @@ class RssOutput extends OutputFormat {
 		return $scriptdir."/".$scriptname.".rss";
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 		
 		$doc = new DOMDocument();
@@ -2376,10 +2401,12 @@ class RssOutput extends OutputFormat {
 		}
 	}	
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}
 }
 
@@ -2411,11 +2438,16 @@ class XmlOutput extends OutputFormat {
 		return $scriptdir."/".$scriptname.".xml";
 	}
 	
-	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats){
+	public function write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config){
 		if(!$this->is_available()) return;
 
 		$namespace = "http://markfrimston.co.uk/calendar_schema";
-		$schemaurl = "http:".get_file_protocolless_url($scriptdir."/".$scriptname.".xsd");
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".xsd",$config);
+		if($url!==FALSE){
+			$schemaurl = "http:".$url;
+		}else{
+			$schemaurl = $scriptname.".xsd";
+		}
 
 		$dom = new DOMImplementation();
 		
@@ -2499,10 +2531,12 @@ class XmlOutput extends OutputFormat {
 		}
 	}
 	
-	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname){
+	public function attempt_protocolless_url_by_name($name,$scriptdir,$scriptname,$config){
 		if($name != self::FORMAT_NAME) return FALSE;
 		if(!$this->is_available()) return FALSE;
-		return get_file_protocolless_url($scriptdir."/".$scriptname.".php")."?format=".self::FORMAT_NAME;
+		$url = get_file_protocolless_url($scriptdir."/".$scriptname.".php",$config);
+		if($url===FALSE) return FALSE;
+		return $url."?format=".self::FORMAT_NAME;
 	}	
 }
 
@@ -4986,16 +5020,29 @@ function http_request($url){
 	}
 }
 
-function get_file_protocolless_url($filepath){
-	// TODO
-	error_log("filepath: ".$filepath);
-	error_log("http_host: ".$_SERVER["HTTP_HOST"]);
-	error_log("document_root: ".$_SERVER["DOCUMENT_ROOT"]);
-	return "//".$_SERVER["HTTP_HOST"].str_replace($_SERVER["DOCUMENT_ROOT"],"",$filepath);
+function get_file_protocolless_url($filepath,$config){
+	$docroot = $_SERVER["DOCUMENT_ROOT"];
+	if(strlen($docroot)>0 && strstr($filepath,$docroot)!==FALSE){
+		return "//".$_SERVER["HTTP_HOST"].str_replace($docroot,"",$filepath);		
+	}elseif(isset($config["script-url"])){
+		return preg_replace("/^\\s*[^:]+:(?=\/\/)/","",$config["script-url"]);
+	}else{
+		return FALSE;
+	}
 }
 
 function get_config_filepath($scriptdir,$scriptname){
 	return $scriptdir."/".$scriptname."-config.php";
+}
+
+function get_config($scriptdir,$scriptname){
+	$confpath = get_config_filepath($scriptdir,$scriptname);
+	if(file_exists($confpath)){
+		$config = include $confpath;
+	}else{
+		$config = array();
+	}
+	return $config;
 }
 
 function write_config($scriptdir,$scriptname,$config){
@@ -5017,13 +5064,7 @@ function debug_dump($var){
 	foreach(explode("\n",var_export($var,TRUE)) as $line) error_log($line);
 }
 
-function read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok){
-	$filepath = get_config_filepath($scriptdir,$scriptname);
-	if(file_exists($filepath)){
-		$config = include $filepath;
-	}else{
-		$config = array();
-	}
+function read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok,$config){
 	if(isset($config["format"])){	
 		$formatname = $config["format"];
 		foreach($input_formats as $format){
@@ -5045,6 +5086,11 @@ function read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedti
 }
 
 function update_cached_if_necessary($scriptdir,$scriptname,$filepath,$output_formats,$input_formats){
+
+	// TODO: don't load config unless necessary. Currently requires format name to have input
+	// check file times
+	$config = get_config($scriptdir,$scriptname);
+
 	if(file_exists($filepath)){
 		$cachedtime = @filemtime($filepath);
 		if($cachedtime === FALSE){
@@ -5057,14 +5103,14 @@ function update_cached_if_necessary($scriptdir,$scriptname,$filepath,$output_for
 	$cal = new Calendar(time());	
 	$cal->set_time(0,0,0);
 	$oldestinputok = $cal->time;	
-	$data = read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok);	
+	$data = read_input_if_necessary($scriptdir,$scriptname,$input_formats,$cachedtime,$oldestinputok,$config);	
 	if(is_string($data)) return $data; // error
 	if($data===FALSE) return;          // not modified
 	
 	$data->events = generate_events($data);
 	unset($data->{"recurring-events"});
 	foreach($output_formats as $format){
-		$error = $format->write_file_if_possible($scriptdir,$scriptname,$data,$output_formats);
+		$error = $format->write_file_if_possible($scriptdir,$scriptname,$data,$output_formats,$config);
 		if($error) return $error;
 	}
 }
