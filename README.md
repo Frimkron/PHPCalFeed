@@ -438,13 +438,13 @@ PHPCalFeed can read event information directly from a public Google calendar,
 using remote ICalendar input. First you will need to obtain your calendar's 
 URL. To do this:
 
-#. Go to <http://www.google.com/calendar> and log in to Google Calendar
-#. Click on the gear icon near the top right and choose "Settings"
-#. Click on the "Calendars" tab just under the page heading
-#. Click on the name of the calendar you'd like to use
-#. Scroll down to the "Calendar Address" section
-#. Click on the green "ICAL" button
-#. Copy the URL from the popup dialog
+1. Go to <http://www.google.com/calendar> and log in to Google Calendar
+2. Click on the gear icon near the top right and choose "Settings"
+3. Click on the "Calendars" tab just under the page heading
+4. Click on the name of the calendar you'd like to use
+5. Scroll down to the "Calendar Address" section
+6. Click on the green "ICAL" button
+7. Copy the URL from the popup dialog
 
 Next, delete the `calendar-config.php` file in the calendar script's directory,
 if it already exists, and create a new one. Set the `url` property to your 
@@ -471,11 +471,11 @@ PHPCalFeed can read event information directly from a public Yahoo calendar,
 using remote ICalendar input. First you will need to obtain your calendar's 
 URL. To do this:
 
-#. Go to <http://calendar.yahoo.com> and log in to Yahoo Calendar
-#. Click on the "Actions" link with the gear beside it, above the calendar grid
-#. Choose "Share..."
-#. Select the calendar you'd like to use and click "Continue"
-#. Copy the URL from the "Share with iCal Address" box
+1. Go to <http://calendar.yahoo.com> and log in to Yahoo Calendar
+2. Click on the "Actions" link with the gear beside it, above the calendar grid
+3. Choose "Share..."
+4. Select the calendar you'd like to use and click "Continue"
+5. Copy the URL from the "Share with iCal Address" box
 
 Next, delete the `calendar-config.php` file in the calendar script's directory,
 if it already exists, and create a new one. Set the `url` property to your 
@@ -499,23 +499,23 @@ export your event data from Outlook, follow the instructions below. These
 instructions are for Outlook 2010, but the process will be similar for your 
 version of Outlook.
 
-#. From the menu bar select "File" > "Open" > "Import"
-#. A wizard will appear. Choose "Export to a file" from the list and click "Next"
-#. Select "Comma Separated Values (Windows)" and click "Next"
-#. Select "Calendar" and click "Next"
-#. Click "Browse" and choose where to save the export file. Click "Next"
-#. Click "Map Custom Fields"
-#. Drag the following fields from the left box into the right box to select them:
+1. From the menu bar select "File" > "Open" > "Import"
+2. A wizard will appear. Choose "Export to a file" from the list and click "Next"
+3. Select "Comma Separated Values (Windows)" and click "Next"
+4. Select "Calendar" and click "Next"
+5. Click "Browse" and choose where to save the export file. Click "Next"
+6. Click "Map Custom Fields"
+7. Drag the following fields from the left box into the right box to select them:
 	* Subject
 	* Description
 	* Start Date
 	* Start Time
 	* End Date
 	* End Time
-#. Click "OK" and then "Finish"
-#. Enter the range of dates for which to export calendar events. Click "OK"
-#. Outlook will take a moment to export the data to the selected file
-#. Rename the exported file to `calendar-master.csv` if you have not done so 
+8. Click "OK" and then "Finish"
+9. Enter the range of dates for which to export calendar events. Click "OK"
+10. Outlook will take a moment to export the data to the selected file
+11. Rename the exported file to `calendar-master.csv` if you have not done so 
    already.
 
 Next, delete the `calendar-config.php` file in the calendar script's directory,
@@ -538,6 +538,7 @@ the table below, where `nth` is a date between `1st` and `31st`, `ddd` is the
 first 3 letters of a day of the week, `mmm` is the first 3 letters of a month 
 of the year, `n` is a number and `yyyy-mm-dd` is a date.
 
+|                |       |                        |                     |
 |----------------|-------|------------------------|---------------------|
 | daily          |       |                        |                     |
 |     - - -      |       |         - - -          |        - - -        |
