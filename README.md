@@ -64,8 +64,30 @@ FTP client, SCP client or similar:
 The script can read event info from a __CSV__, __JSON__ or __ICalendar__ file. 
 It can also extract event info from __HTML__. A CSV file is the simplest of 
 these options. Events can be one-off occurrences or recurring events which 
-repeat on a schedule. See the following sections for how to prepare the data 
-file in your chosen format. 
+repeat on a schedule.
+
+See the following two sections for general information on how to set up your
+calendar's input file:
+
+* 3.2.1 [Local File](#321-local-file)
+* 3.2.2 [Remote File](#322-remote-file)
+
+And see the following sections for how to prepare the input file in your chosen
+data format:
+
+* 3.2.3 [CSV Input](#323-csv-input)
+* 3.2.4 [JSON Input](#324-json-input)
+* 3.2.5 [ICalendar Input](#325-icalendar-input)
+* 3.2.6 [HTML Input](#326-html-input)
+
+The following sections describe how to set up input from several commonly-used
+sources:
+
+* 3.2.7 [Google Calendar Input](#327-google-calendar-input)
+* 3.2.8 [Yahoo Calendar Input](#328-yahoo-calendar-input)
+* 3.2.9 [Microsoft Outlook CSV Input](#329-microsoft-outlook-csv-input)
+* 3.2.10 [Lanyrd Input](#3210-lanyrd-input)
+* 3.2.11 [Meetup.com Input](#3211-meetupcom-input)
 
 
 #### 3.2.1 Local File
@@ -143,7 +165,7 @@ heading on the first row of the file:
 * `name` __(required)__ - the title of the event
 * `date` __(required)__ - either a one-off date in `yyyy-mm-dd` format, or the
   spec for a recurring event as described in the 
-  [Event Recurrence Specification](#3210-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3212-event-recurrence-specification) section below.
   For example, `2014-02-28` or `weekly on thu`.
 * `time` _(optional)_ - the time of day at which the event starts, in the following
   24 hour time format: `hh:mm`. For example, `21:30`. Defaults to midnight.
@@ -219,7 +241,7 @@ the following properties:
 * `name` __(required)__ - the title of the event, as a string
 * `recurrence` __(required)__ - a string specifying how often the event occurs.
   For details of the format of this property see the 
-  [Event Recurrence Specification](#3210-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3212-event-recurrence-specification) section below.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
   in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults to 
   midnight.
@@ -525,7 +547,64 @@ calendar script in your browser to clear the cache. Your exported events should
 be displayed.
 
 
-#### 3.2.10 Event Recurrence Specification
+#### 3.2.10 Lanyrd Input
+
+PHPCalFeed can read event data from a [Lanyrd](http://lanyrd.com) calendar 
+feed. To use a Lanyrd event series as your calendar input, do the following:
+
+1. Visit the page for your event _series_. The URL will be in the form
+   `http://lanyrd.com/series/<username>/` where `<username>` is the name
+   of your event.
+2. Scroll down to the "Stay Updated" section and click on the "Add to my 
+   calendar" link.
+3. Choose the "iCal" tab and copy the URL from the box.
+
+Next, delete the `calendar-config.php` file in the calendar script's directory,
+if it already exists, and create a new one. Set the `url` property to your 
+Lanyrd event series URL, by copying the code exactly as it appears in the 
+section below and replacing the example url:
+
+`````````````````````````````````````````````` php
+
+<?php
+return array(
+	'format' => 'icalendar-remote',
+	'url' => 'http://your-event-series/url.ics'
+);
+
+``````````````````````````````````````````````
+
+
+#### 3.2.11 Meetup.com Input
+
+PHPCalFeed can read event data from a [Meetup.com](http://meetup.com) calendar
+feed, provided you have made the schedule information public. To use a Meetup
+calendar as your input, do the following:
+
+1. Visit your group's page on Meetup.com
+2. Note your group's _URL username_. This is the name that appears in your 
+   browser's address bar. For example: `http://meetup.com/<your-name-here>/`
+3. The URL for your event feed will then be: 
+   `http://api.meetup.com/<your-name-here>/upcoming.ical` where `<your-name-here>`
+   is your group's URL username.
+
+Next, delete the `calendar-config.php` file in the calendar script's directory,
+if it already exists, and create a new one. Set the `url` property to your 
+Meetup event feed URL, by copying the code exactly as it appears in the 
+section below and replacing the example url:
+
+`````````````````````````````````````````````` php
+
+<?php
+return array(
+	'format' => 'icalendar-remote',
+	'url' => 'http://api.meetup.com/<your-name-here>/upcoming.ical'
+);
+
+``````````````````````````````````````````````
+
+
+#### 3.2.12 Event Recurrence Specification
 
 In your input file you can specify an event that takes place on a recurring 
 schedule, such as a social gathering that happens at the same time every week. 
