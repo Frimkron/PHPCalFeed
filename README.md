@@ -524,8 +524,44 @@ if it already exists. Copy the CSV file to the same directory as the
 calendar script in your browser to clear the cache. Your exported events should
 be displayed.
 
+#### 3.2.10 OpenACalendar input
 
-#### 3.2.10 Event Recurrence Specification
+Events can be imported from an http://ican.openacalendar.org/ site like  
+https://opentechcalendar.co.uk/
+
+Create a `calendar-config.php` file in the calendar script's directory, with some 
+JSON config variables. 
+
+`````````````````````````````````````````````` php
+<?php
+return array(
+	'format'=>'openacalendar-remote',
+	'url' => 'opentechcalendar.co.uk',
+);
+
+``````````````````````````````````````````````
+
+The URL should be the base URL of the site, with no protocol or path element.
+
+Other optional variables are:
+  *  group - Filter events from one group only. Pass the ID number from 
+     the URL. eg For 'http://opentechcalendar.co.uk/group/1-techmeetup-edinburgh' 
+     pass '1'.
+  *  venue - Filter events from one venue only. Pass the ID number from 
+     the URL. eg For 'http://opentechcalendar.co.uk/venue/1-brew-lab' 
+     pass '1'.
+  *  area - Filter events from one area only. Pass the ID number from 
+     the URL. eg For 'http://opentechcalendar.co.uk/area/62-edinburgh' 
+     pass '62'.
+  *  curated_list - Filter events from one curated list only. Pass the ID number from 
+     the URL. eg For 'http://opentechcalendar.co.uk/curatedlist/1' 
+     pass '1'.
+  *  country -  - Filter events from one country only. Pass the ID code from 
+     the URL. eg For 'http://opentechcalendar.co.uk/country/GB' 
+     pass 'GB'.
+
+
+#### 3.2.11 Event Recurrence Specification
 
 In your input file you can specify an event that takes place on a recurring 
 schedule, such as a social gathering that happens at the same time every week. 
