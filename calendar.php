@@ -877,7 +877,7 @@ class RemoteICalendarInput extends ICalendarInputBase {
 		return $result;
 	}
 	
-	private function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url){
+	protected function input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url){
 		if(!$this->url_read_due($cachedtime,$oldestinputok)) return FALSE;
 		$error = $this->check_cached_error($scriptdir,$scriptname);
 		if($error) return $error;
@@ -887,6 +887,36 @@ class RemoteICalendarInput extends ICalendarInputBase {
 	}
 	
 }
+
+
+class RemoteOpenACalendarInput extends RemoteICalendarInput {
+	
+	public function attempt_handle_by_name($scriptdir,$scriptname,$formatname,$cachedtime,$oldestinputok,$config){
+		if($formatname != "openacalendar-remote") return FALSE;
+		if(!isset($config["url"])) return "OpenACalendar: missing config parameter: 'url'";
+		$url = 'http://' . $config['url'] .	'/api1';
+		if (isset($config['group']) && $config['group']) {
+			$url .= '/group/'. $config['group'];
+		} else if (isset($config['venue']) && $config['venue']) {
+			$url .= '/venue/'.$config['venue'];
+		} else if (isset($config['area']) && $config['area']) {
+			$url .= '/area/'.$config['area'];
+		} else if (isset($config['curated_list']) && $config['curated_list']) {
+			$url .= '/curatedlist/'.$config['curated_list'];
+		} else if (isset($config['country']) && $config['country']) {
+			$url .= '/country/'.$config['country'];
+		}
+		$url .= '/events.ical';
+		$result = $this->input_if_necessary($scriptdir,$scriptname,$cachedtime,$oldestinputok,$url);
+		if($result === FALSE) return TRUE;
+		return $result;
+	}
+	
+	public function attempt_handle_by_discovery($scriptdir,$scriptname,$cachedtime,$oldestinputok,$config){
+		return FALSE; // discovery not supported
+	}
+}
+
 
 abstract class CsvInputBase extends InputFormat {
 
@@ -5180,6 +5210,7 @@ $output_formats = array(
 );
 
 $input_formats = array(
+	new RemoteOpenACalendarInput(),
 	new RemoteICalendarInput(),
 	new RemoteJsonInput(),
 	new RemoteCsvInput(),

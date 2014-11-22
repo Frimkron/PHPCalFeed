@@ -88,6 +88,7 @@ sources:
 * 3.2.9 [Microsoft Outlook CSV Input](#329-microsoft-outlook-csv-input)
 * 3.2.10 [Lanyrd Input](#3210-lanyrd-input)
 * 3.2.11 [Meetup.com Input](#3211-meetupcom-input)
+* 3.2.12 [OpenACalendar Input](#3212-openacalendar-input)
 
 
 #### 3.2.1 Local File
@@ -165,7 +166,7 @@ heading on the first row of the file:
 * `name` __(required)__ - the title of the event
 * `date` __(required)__ - either a one-off date in `yyyy-mm-dd` format, or the
   spec for a recurring event as described in the 
-  [Event Recurrence Specification](#3212-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3213-event-recurrence-specification) section below.
   For example, `2014-02-28` or `weekly on thu`.
 * `time` _(optional)_ - the time of day at which the event starts, in the following
   24 hour time format: `hh:mm`. For example, `21:30`. Defaults to midnight.
@@ -241,7 +242,7 @@ the following properties:
 * `name` __(required)__ - the title of the event, as a string
 * `recurrence` __(required)__ - a string specifying how often the event occurs.
   For details of the format of this property see the 
-  [Event Recurrence Specification](#3212-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3213-event-recurrence-specification) section below.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
   in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults to 
   midnight.
@@ -604,7 +605,45 @@ return array(
 ``````````````````````````````````````````````
 
 
-#### 3.2.12 Event Recurrence Specification
+#### 3.2.12 OpenACalendar input
+
+Events can be imported from an [OpenACalendar](http://ican.openacalendar.org/) 
+site like <https://opentechcalendar.co.uk/>
+
+Create a `calendar-config.php` file in the calendar script's directory, with 
+some JSON config variables. 
+
+`````````````````````````````````````````````` php
+<?php
+return array(
+	'format'=>'openacalendar-remote',
+	'url' => 'opentechcalendar.co.uk',
+);
+
+``````````````````````````````````````````````
+
+The URL should be the base URL of the site, with no protocol or path element.
+
+Other optional variables are:
+
+* group - Filter events from one group only. Pass the ID number from 
+  the URL. eg For 'http://opentechcalendar.co.uk/group/1-techmeetup-edinburgh' 
+  pass '1'.
+* venue - Filter events from one venue only. Pass the ID number from 
+  the URL. eg For 'http://opentechcalendar.co.uk/venue/1-brew-lab' 
+  pass '1'.
+* area - Filter events from one area only. Pass the ID number from 
+  the URL. eg For 'http://opentechcalendar.co.uk/area/62-edinburgh' 
+  pass '62'.
+* curated_list - Filter events from one curated list only. Pass the ID 
+  number from the URL. eg For 'http://opentechcalendar.co.uk/curatedlist/1' 
+  pass '1'.
+* country -  - Filter events from one country only. Pass the ID code from 
+  the URL. eg For 'http://opentechcalendar.co.uk/country/GB' 
+  pass 'GB'.
+
+
+#### 3.2.13 Event Recurrence Specification
 
 In your input file you can specify an event that takes place on a recurring 
 schedule, such as a social gathering that happens at the same time every week. 
