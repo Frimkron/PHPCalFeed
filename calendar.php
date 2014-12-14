@@ -5051,7 +5051,7 @@ function http_request($url){
 }
 
 function get_file_protocolless_url($filepath,$config){
-	$docroot = $_SERVER["DOCUMENT_ROOT"];
+	$docroot = preg_replace("/\/+$/","",$_SERVER["DOCUMENT_ROOT"]);
 	if(strlen($docroot)>0 && strstr($filepath,$docroot)!==FALSE){
 		return "//".$_SERVER["HTTP_HOST"].str_replace($docroot,"",$filepath);		
 	}elseif(isset($config["script-url"])){
