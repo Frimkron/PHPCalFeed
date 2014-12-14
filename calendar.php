@@ -1222,7 +1222,7 @@ abstract class JsonInputBase extends InputFormat {
 					return "JSON: Missing event recurrence";
 				}
 				$parser = new RecurrenceParser();
-				$result = $parser->parse(strtolower($item->recurrence,$item->time));
+				$result = $parser->parse(strtolower($item->recurrence),$item->time);
 				if($result===FALSE){
 					return "JSON: Invalid event recurrence syntax";
 				}
