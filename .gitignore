@@ -1,0 +1,13 @@
+*~
+*.save
+*.orig
+
+/calendar.html
+/calendar-button.html
+/calendar-frag.html
+/calendar.ics
+/calendar.json
+/calendar.lsp
+/calendar.rss
+/calendar.xml
+/calendar-config.php

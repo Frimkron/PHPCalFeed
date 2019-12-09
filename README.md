@@ -37,10 +37,14 @@ multiple different feed formats.
 
 ### Optional
 
-* PHP's JSON module is required for JSON input and output
-* PHP's XML DOM module is required for XML and XHTML output
-* PHP must be configured to allow remote requests in order to use remote file input
-* PHP's OpenSSL module is required for remote requests over HTTPS
+* PHP's [JSON][json ext] and [Multibyte String][mbstring ext] extensions are 
+  required for JSON input and output
+* PHP's [XML DOM][dom ext] and [libXML][libxml ext] extensions are required for 
+  XML and XHTML output
+* PHP must be configured to [allow remote requests][urlfopen] in order to use 
+  remote file input
+* PHP's [OpenSSL][openssl ext] extension is required for remote requests over 
+  HTTPS
 
 
 3 User Guide
@@ -113,10 +117,13 @@ on a different server. This is useful if you wish to use another calendar feed
 as the input, such as a public Google calendar (see 
 [Google Calendar Input](#327-google-calendar-input) for more on this). Note 
 that your URL should begin with the `http://` or `https://` protocol and 
-__not__ `webcal://`. In order to connect to a remote URL, the `allow_url_fopen`
-option must be enabled for your server's PHP installation. In addition, 
-connecting to a secure `https://` URL requires the OpenSSL extension to be 
-enabled for your installation.
+__not__ `webcal://`. In order to connect to a remote URL, the 
+[`allow_url_fopen`][urlfopen] option must be enabled for your server's PHP 
+installation. In addition, connecting to a secure `https://` URL requires the 
+[OpenSSL][openssl ext] extension to be enabled for your installation.
+
+[urlfopen]: https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-fopen
+[openssl ext]: https://www.php.net/manual/en/book.openssl.php
 
 To use a remote file, create the file `calendar-config.php` in the script 
 directory, if it doesn't already exist, and define the `url` property by 
@@ -166,13 +173,15 @@ heading on the first row of the file:
 * `name` __(required)__ - the title of the event
 * `date` __(required)__ - either a one-off date in `yyyy-mm-dd` format, or the
   spec for a recurring event as described in the 
-  [Event Recurrence Specification](#3213-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3213-event-recurrence-specification) section
+  below.
   For example, `2014-02-28` or `weekly on thu`.
-* `time` _(optional)_ - the time of day at which the event starts, in the following
-  24 hour time format: `hh:mm`. For example, `21:30`. Defaults to midnight.
-* `duration` _(optional)_ - the length of time the event continues for, as a number
-  of days, minutes and hours in the following format: `[0d][0h][0m]`. For example, 
-  `3h 30m`. Defaults to 24 hours.
+* `time` _(optional)_ - the time of day at which the event starts, in the 
+  following 24 hour time format: `hh:mm`. For example, `21:30`. Defaults to 
+  midnight.
+* `duration` _(optional)_ - the length of time the event continues for, as a 
+  number of days, minutes and hours in the following format: `[0d][0h][0m]`. For
+  example, `3h 30m`. Defaults to 24 hours.
 * `description` _(optional)_ - a description of the event
 * `url` _(optional)_ - a link to more information about the event
 
@@ -205,8 +214,9 @@ return array(
 #### 3.2.4 JSON Input
 
 [JSON](http://json.org) is a simple data format using nested "objects" with
-named "properties". Note that to use JSON input, the JSON and Multibyte String 
-extensions must be enabled for your server's PHP installation.
+named "properties". Note that to use JSON input, the [JSON][json ext] and 
+[Multibyte String][mbstring ext] extensions must be enabled for your server's 
+PHP installation.
 
 To supply the event information in JSON format, use the file extension `.json` 
  - for example, `calendar-master.json`. Your JSON file should contain a root 
@@ -228,11 +238,11 @@ following properties:
 * `date` __(required)__ - the date on which the event starts, as a string in
   the following format: `yyyy-mm-dd`.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
-  in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults to 
-  midnight.
+  in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults
+  to midnight.
 * `duration` _(optional)_ - the length of time the event continues for, as a 
-  string containing a number of days, hours and minutes as follows: `[0d][0h][0m]`.
-  For example, `3h 30m`. Defaults to 24 hours.
+  string containing a number of days, hours and minutes as follows: 
+  `[0d][0h][0m]`. For example, `3h 30m`. Defaults to 24 hours.
 * `description` _(optional)_ - a description of the event, as a string
 * `url` _(optional)_ a link to more information about the event, as a string
 
@@ -242,19 +252,20 @@ the following properties:
 * `name` __(required)__ - the title of the event, as a string
 * `recurrence` __(required)__ - a string specifying how often the event occurs.
   For details of the format of this property see the 
-  [Event Recurrence Specification](#3213-event-recurrence-specification) section below.
+  [Event Recurrence Specification](#3213-event-recurrence-specification) section
+  below.
 * `time` _(optional)_ - the time of day at which the event starts, as a string
-  in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults to 
-  midnight.
+  in the following 24 hour time format: `hh:mm`. For example, `23:30`. Defaults
+  to midnight.
 * `duration` _(optional)_ - the length of time the event continues for, as a
-  string containing a number of days, hours and minutes as follows: `[0d][0h][0m]`.
-  For example, `3h 30m`. Defaults to 24 hours.
+  string containing a number of days, hours and minutes as follows: 
+  `[0d][0h][0m]`. For example, `3h 30m`. Defaults to 24 hours.
 * `description` _(optional)_ - a description of the event, as a string
 * `url` _(optional)_ a link to more information about the event as a string
 
 Below is a complete example JSON file:
 
-``````````````````````````````````````````````````````````````````````````````` json
+``````````````````````````````````````````````````````````````````````````` json
 {
 	"name": "Mark's Calendar",
 	"events": [
@@ -279,7 +290,7 @@ Below is a complete example JSON file:
 		}
 	]
 }
-```````````````````````````````````````````````````````````````````````````````
+```````````````````````````````````````````````````````````````````````````
 
 
 #### 3.2.5 ICalendar Input
@@ -386,12 +397,13 @@ return array(
 
 The full list of customisable class properties is as follows:
 
-* `cal-name-class` - the calendar title. Defaults to the page `<title>` contents.
-* `cal-description-class` - the calendar description. Defaults to the page's `<meta>` 
-  description contents.
+* `cal-name-class` - the calendar title. Defaults to the page `<title>` 
+  contents.
+* `cal-description-class` - the calendar description. Defaults to the page's 
+  `<meta>` description contents.
 * `cal-url-class` - the calendar's URL. Defaults to the URL of the page.
-* `cal-event-class` - the element surrounding each set of event properties. Defaults 
-  to `vevent`.
+* `cal-event-class` - the element surrounding each set of event properties. 
+  Defaults to `vevent`.
 * `ev-name-class` - the event's name. Defaults to `summary`.
 * `ev-description-class` - the event's description. Defaults to `description`.
 * `ev-url-class` - the event's URL. Defaults to `url`.
@@ -438,10 +450,10 @@ The full list of customisable XPath properties is as follows:
   description contents.
 * `cal-url-xpath` - the calendar's URL. Expression is relative to the document 
   root. Defaults to the URL of the page.
-* `ev-name-xpath` - the event`s name. Expression is relative to the event element.
-  Defaults to element with `summary` class.
-* `ev-description-xpath` - the event's description. Expression is relative to the 
-  event element. Defaults to element with `description` class.
+* `ev-name-xpath` - the event`s name. Expression is relative to the event 
+  element. Defaults to element with `summary` class.
+* `ev-description-xpath` - the event's description. Expression is relative to 
+  the event element. Defaults to element with `description` class.
 * `ev-url-xpath` - the event's url. Expression is relative to the event element.
   Defaults to element with `url` class.
 * `ev-start-xpath` - the event's start date/time. Expression is relative to the 
@@ -523,12 +535,14 @@ instructions are for Outlook 2010, but the process will be similar for your
 version of Outlook.
 
 1. From the menu bar select "File" > "Open" > "Import"
-2. A wizard will appear. Choose "Export to a file" from the list and click "Next"
+2. A wizard will appear. Choose "Export to a file" from the list and click 
+   "Next"
 3. Select "Comma Separated Values (Windows)" and click "Next"
 4. Select "Calendar" and click "Next"
 5. Click "Browse" and choose where to save the export file. Click "Next"
 6. Click "Map Custom Fields"
-7. Drag the following fields from the left box into the right box to select them:
+7. Drag the following fields from the left box into the right box to select 
+   them:
 	* Subject
 	* Description
 	* Start Date
@@ -586,8 +600,8 @@ calendar as your input, do the following:
 2. Note your group's _URL username_. This is the name that appears in your 
    browser's address bar. For example: `http://meetup.com/<your-name-here>/`
 3. The URL for your event feed will then be: 
-   `http://api.meetup.com/<your-name-here>/upcoming.ical` where `<your-name-here>`
-   is your group's URL username.
+   `http://api.meetup.com/<your-name-here>/upcoming.ical` where 
+   `<your-name-here>`is your group's URL username.
 
 Next, delete the `calendar-config.php` file in the calendar script's directory,
 if it already exists, and create a new one. Set the `url` property to your 
@@ -703,9 +717,10 @@ Here are some examples:
 * `daily` - every day
 * `weekly on thu` - every Thursday
 * `yearly on 8th may` - the 8th of May every year
-* `yearly on 2nd to last wed of apr` - the second-to-last Wednesday of April, each year
-* `every 2 weeks on 2nd to last day starting 2013-02-01` - every other Saturday, starting 
-  with the one following the 1st February 2013
+* `yearly on 2nd to last wed of apr` - the second-to-last Wednesday of April, 
+  each year
+* `every 2 weeks on 2nd to last day starting 2013-02-01` - every other Saturday,
+  starting with the one following the 1st February 2013
 
 
 ### 3.3 Linking to Feeds
@@ -781,40 +796,45 @@ iCal, Google Calendar, etc.
 
 #### `rss`
 RSS 2.0 format - a standard news aggregation format compatible with many news 
-readers and other applications. Note that to generate this output, the libxml 
-and DOM extensions must be enabled for your server's PHP installation.
+readers and other applications. Note that to generate this output, the 
+[libxml][libxml ext] and [DOM][dom ext] extensions must be enabled for your 
+server's PHP installation.
 
 #### `xml`
 XML format - a popular and widely supported data exchange format. Note that to
-generate this output, the libxml and DOM extensions must be enabled for your
-server's PHP installation.
+generate this output, the [libxml][libxml ext] and [DOM][dom ext] extensions 
+must be enabled for your server's PHP installation.
 
 #### `json`
 JSON format - another popular, widely supported data exchange format. Note that
-to generate this output, the JSON and Multibyte String extensions must be 
-enabled for your server's PHP installation.
+to generate this output, the [JSON][json ext] and 
+[Multibyte String][mbstring ext] extensions must be enabled for your server's 
+PHP installation.
 
 #### `jsonp`
 JSON wrapped in a function call - suitable for fetching via Javascript.
 Use the `callback` parameter to specify the function name to use. Note that
-to generate this output, the JSON and Multibyte String extensions must be 
-enabled for your server's PHP installation.
+to generate this output, the [JSON][json ext] and 
+[Multibyte String][mbstring ext] extensions must be enabled for your server's 
+PHP installation.
 
 #### `html`
 HTML format (full) - a full webpage for users to view the event data 
-directly in the browser. Note that to generate this output, the libxml and DOM 
-extensions must be enabled for your server's PHP installation.
+directly in the browser. Note that to generate this output, the 
+[libxml][libxml ext] and [DOM][dom ext] extensions must be enabled for your 
+server's PHP installation.
 
 #### `html-frag`
 HTML format (fragment) - just the HTML for the calendar itself,
 suitable for embedding in another page. Note that to generate this output, the 
-libxml and DOM extensions must be enabled for your server's PHP installation.
+[libxml][libxml ext] and [DOM][dom ext] extensions must be enabled for your 
+server's PHP installation.
 
 #### `html-button`
 HTML format (subscribe button) - just the HTML for the calendar subscribe
 button, suitable for embedding in anoter page. Note that to generate this 
-output, the libxml and DOM extensions must be enabled for your server's PHP
-installation.
+output, the [libxml][libxml ext] and [DOM][dom ext] extensions must be enabled 
+for your server's PHP installation.
 
 #### `s-exp`
 S-Expression format - a data format used by the Lisp programming language.
@@ -827,6 +847,11 @@ When linking to the ICalendar feed, it is recommended to specify "webcal" as
 the protocol by prefixing the URL with `webcal://` rather than the usual 
 `http://`. This will help the browser to open the feed in an 
 ICalendar-compatible application.
+
+[dom ext]: https://www.php.net/manual/en/book.dom.php
+[libxml ext]: https://www.php.net/manual/en/book.libxml.php
+[json ext]: https://www.php.net/manual/en/book.json.php
+[mbstring ext]: https://www.php.net/manual/en/book.mbstring.php
 
 
 ### 3.4 Displaying in Another PHP Script
@@ -953,13 +978,13 @@ The subscribe button for the HTML calendar has its own CSS file,
 name and purpose of each class defined in this file is explained below:
 
 * `calsub-button` - the outermost container surrounding the button.
-* `calsub-link` - the anchor element inside the button, allowing the button itself
-  to be clicked as a link.
+* `calsub-link` - the anchor element inside the button, allowing the button 
+  itself to be clicked as a link.
 * `calsub-menu` - the popup menu containing the various subscribe options
 * `calsub-item` - a subscribe option within the popup menu
-* `calsub-icalendar`, `calsub-google`, `calsub-live`, `calsub-rss`, `calsub-json`,
-  `calsub-xml`, `calsub-sexp` - these classes identify the individual subscribe 
-  options.
+* `calsub-icalendar`, `calsub-google`, `calsub-live`, `calsub-rss`, 
+  `calsub-json`, `calsub-xml`, `calsub-sexp` - these classes identify the 
+  individual subscribe options.
 
 The subscribe button image and the subscribe icons can be found in the CSS
 spritesheet `calendar-sub.png`. 
