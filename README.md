@@ -311,7 +311,7 @@ HTML is a document markup language used to deliver web pages to your internet
 browser. HTML content is more often concerned with the presentation of a page
 rather than delivering meaningful data in a machine-readable format. PHPCalFeed
 can, however, "scrape" event information from a page provided the relevant 
-markup elements can be uniquely identified in the document. To use HTML format,
+markup elements can be uniquely identified in the document. To use HTML [format](https://www.interviewbit.com/html-cheat-sheet/),
 use the file extension `.htm` or `.html` - for example, `calendar-master.html`.
 It is usually more useful to use a remote HTML file by its URL. See 
 [Remote File](#322-remote-file) for more information.
